@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "id": "foamy.bolt",
+  "name": "Foamy Bolt",
+  "version": "1.0.0",
+  "author": "foamrider",
+  "description": "Logitech receiver and battery status with List and Tiles layouts",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Logitech devices",
+    "description": "Solaar-managed Bolt, Unifying and Lightspeed receiver devices",
+    "category": "Hardware",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "language": "system",
+      "layout": "list",
+      "barPercentage": "low",
+      "lowBatteryThreshold": 30,
+      "refreshSeconds": 60,
+      "showOffline": false,
+      "hideWhenAbsent": true
+    },
+    "schema": [
+      {
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "defaultValue": "system",
+        "options": [
+          "system",
+          "en",
+          "nb"
+        ]
+      },
+      {
+        "key": "layout",
+        "type": "enum",
+        "label": "Layout",
+        "defaultValue": "list",
+        "options": [
+          "list",
+          "tiles"
+        ]
+      },
+      {
+        "key": "barPercentage",
+        "type": "enum",
+        "label": "Bar percentage",
+        "defaultValue": "low",
+        "options": [
+          "low",
+          "always",
+          "never"
+        ]
+      },
+      {
+        "key": "lowBatteryThreshold",
+        "type": "integer",
+        "label": "Low battery below (%)",
+        "defaultValue": 30,
+        "min": 1,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "refreshSeconds",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "defaultValue": 60,
+        "min": 30,
+        "max": 3600,
+        "step": 30
+      },
+      {
+        "key": "showOffline",
+        "type": "boolean",
+        "label": "Show offline devices",
+        "defaultValue": false
+      },
+      {
+        "key": "hideWhenAbsent",
+        "type": "boolean",
+        "label": "Hide without a receiver",
+        "defaultValue": true
+      }
+    ]
+  },
+  "license": "MIT"
+}
