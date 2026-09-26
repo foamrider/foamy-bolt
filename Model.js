@@ -30,4 +30,11 @@ function parsePayload(raw) {
   p.errors=p.errors.map(function(e) { if (typeof e!=="string") throw new Error("Invalid error"); return e.slice(0,300) })
   return p
 }
-if (typeof module !== "undefined") module.exports={minutesSince:minutesSince,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload}
+var eventError="Device event monitoring unavailable. Periodic refresh is still active."
+function parseEvent(raw) {
+  var event=JSON.parse(raw)
+  if(!event || ["changed","health"].indexOf(event.event)<0)throw new Error("Invalid device event")
+  if(event.event==="health" && event.error!=="" && event.error!==eventError)throw new Error("Invalid event health")
+  return event
+}
+if (typeof module !== "undefined") module.exports={minutesSince:minutesSince,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError}

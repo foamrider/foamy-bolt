@@ -40,6 +40,10 @@ Panel {
   property bool receiverDetails: false
   property string settingsError: ""
   property string launchError: ""
+  property string eventError: ""
+  onEventErrorChanged: { if(eventError)console.warn("foamy.bolt: "+eventError) }
+  property bool refreshPending: false
+  property bool shuttingDown: false
   property var pendingPreferences: ({})
   visible: opened || !preference("hideWhenAbsent") || payload.status!=="absent"
   implicitWidth:button.implicitWidth
@@ -64,7 +68,8 @@ Panel {
   function openSettings() { editingSettings=true; open(); panelScroll.contentY=0; Qt.callLater(function(){settingsPane.focusBack()}) }
   function closeSettings() { editingSettings=false; panelScroll.contentY=0; Qt.callLater(function(){settingsButton.forceActiveFocus()}) }
   function refresh(force) {
-    if (statusProcess.running) return
+    // Keep one forced refresh queued when an event arrives during a hardware query.
+    if (statusProcess.running) { if(force)refreshPending=true; return }
     // Bound a stalled HID query; each widget keeps at most one helper running.
     statusProcess.command=["timeout","--kill-after=2s","25s","python3",helperPath].concat(force?["--refresh"]:[])
     statusProcess.running=true
@@ -92,6 +97,7 @@ Panel {
     id:statusProcess
     stdout:StdioCollector { id:statusOutput; waitForEnd:true }
     onExited:function(code) {
+      if (root.refreshPending) { root.refreshPending=false; eventRefresh.restart() }
       if (code!==0) { root.failStatus(code===124||code===137?"Device query timed out. Try Refresh.":"Device query failed.");return }
       try {
         var next=Model.parsePayload(statusOutput.text)
@@ -103,6 +109,32 @@ Panel {
       catch(error) { root.failStatus("Invalid status response.");console.warn("foamy.bolt: invalid status response") }
     }
   }
+  Process {
+    id:eventProcess
+    command:["python3",root.helperPath.replace(/logitech_status\.py$/,"logitech_events.py")]
+    stdout:SplitParser {
+      onRead:function(line) {
+        try {
+          var event=Model.parseEvent(line)
+          eventWatchdog.restart()
+          if(event.event==="changed") {
+            // Coalesce receiver bursts without delaying forever on continuous events.
+            if(!eventRefresh.running)eventRefresh.start()
+          } else root.eventError=event.error
+        } catch(error) { root.eventError=Model.eventError; eventProcess.signal(9) }
+      }
+    }
+    onExited:function() {
+      eventWatchdog.stop()
+      if(!root.shuttingDown) { root.eventError=Model.eventError; eventRestart.restart() }
+    }
+  }
+  Timer { id:eventRefresh; interval:350; onTriggered:root.refresh(true) }
+  Timer { id:eventRestart; interval:30000; onTriggered:{eventProcess.running=true;eventWatchdog.restart()} }
+  // A heartbeat bounds stalled Solaar calls; normal polling remains independent.
+  Timer { id:eventWatchdog; interval:45000; onTriggered:{root.eventError=Model.eventError;eventProcess.signal(9)} }
+  Component.onCompleted: { eventProcess.running=true; eventWatchdog.start() }
+  Component.onDestruction: { root.shuttingDown=true; eventProcess.running=false }
   Timer { interval:root.preference("refreshSeconds")*1000;running:true;repeat:true;triggeredOnStart:true;onTriggered:root.refresh(false) }
   onOpenedChanged: {
     panelScroll.contentY=0

@@ -18,6 +18,17 @@ omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
 - Open the cog to choose **List** or **Tiles**, language, and refresh interval.
 - Click refresh to update the readings. Right-click the widget to open Solaar.
 
+Mouse and keyboard connection, disconnection, supported battery notifications, and receiver hotplug
+events trigger a refresh automatically. Mouse movement and button events are
+ignored. The refresh interval remains a fallback (60 seconds by default), and
+opening the popup or clicking refresh always requests a fresh reading.
+
+The event helper uses Solaar's Python receiver library and its existing `pyudev`
+dependency. It does not apply Solaar profiles or change pairing. If monitoring
+fails, a warning is logged, periodic refresh continues, and the helper
+retries automatically. Notification support depends on the receiver and device;
+sleep or power-off detection may be delayed until the receiver reports it.
+
 Supports Bolt, Unifying, and Lightspeed receivers. Direct Bluetooth and USB
 devices are not discovered. Pairing and device configuration stay in Solaar.
 
