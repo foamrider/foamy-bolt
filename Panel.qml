@@ -107,7 +107,7 @@ Panel {
   onOpenedChanged: {
     panelScroll.contentY=0
     if (!opened) editingSettings=false
-    else {refresh(true);Qt.callLater(function(){if(!root.editingSettings)settingsButton.forceActiveFocus()})}
+    else {refresh(true);Qt.callLater(function(){if(!root.editingSettings)panelScroll.forceActiveFocus()})}
   }
   IpcHandler {
     target:"foamy.bolt"
@@ -144,7 +144,8 @@ Panel {
     owner:root
     bar:root.bar
     open:root.opened
-    focusTarget:root.editingSettings?settingsPane.backTarget:settingsButton
+    // Start on the container so opening does not highlight an action; Tab reaches Settings.
+    focusTarget:root.editingSettings?settingsPane.backTarget:panelScroll
     padding:0
     borderSpec:Border.flat(Qt.alpha(Color.popups.text,0.15),1)
     contentWidth:panel.fittedContentWidth(Style.space(400))
