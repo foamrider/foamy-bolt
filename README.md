@@ -2,11 +2,12 @@
 
 Logitech receiver and battery status.
 
-![Foamy Bolt screenshot](screenshot.png)
+![Foamy Bolt screenshot](preview.png)
 
 ## Install
 
-Install Solaar (`solaar`) and make sure it can access your receivers.
+Requires Omarchy Quattro and Python 3. Install Solaar (`solaar`) and make sure
+it can access your receivers.
 
 ```sh
 omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
@@ -31,6 +32,18 @@ sleep or power-off detection may be delayed until the receiver reports it.
 
 Supports Bolt, Unifying, and Lightspeed receivers. Direct Bluetooth and USB
 devices are not discovered. Pairing and device configuration stay in Solaar.
+
+## Remove
+
+```sh
+omarchy plugin remove foamy.bolt
+```
+
+Removal stops the plugin's device monitoring. Solaar, receiver pairing, and
+device settings remain installed and unchanged.
+
+Omarchy manages the plugin entry in `shell.json`. Packages and data outside
+the plugin directory are retained unless you remove them separately.
 
 ## License
 
