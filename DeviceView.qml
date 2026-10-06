@@ -22,7 +22,7 @@ Rectangle {
   readonly property string stateText: tr(!online?"Offline":device.charging?"Charging":!hasBattery?"Battery unavailable":low?"Low battery":"Connected")
   function tr(text) { return Preferences.text(text,language) }
   color: tile ? Qt.alpha(Color.popups.text,0.045) : "transparent"
-  radius: Style.space(11)
+  radius: Style.cornerRadius * 2
   implicitHeight: tile ? tileContent.implicitHeight+Style.space(30) : Math.max(Style.space(66),listContent.implicitHeight+Style.space(20))
   Accessible.role: Accessible.StaticText
   Accessible.name: device.name+", "+stateText+(hasBattery?", "+reading:"")

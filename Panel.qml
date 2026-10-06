@@ -237,7 +237,7 @@ Panel {
             Text {text:"Logitech";color:Color.popups.text;font.family:"sans-serif";font.pixelSize:Style.space(16)}
             Text {text:root.payload.status==="loading"?root.tr("Reading devices…"):root.onlineDevices.length+" "+root.tr(root.onlineDevices.length===1?"device connected":"devices connected");color:root.secondary;font.family:"sans-serif";font.pixelSize:Style.space(11)}
           }
-          BoltAction {id:settingsButton;width:Style.space(32);height:Style.space(32);radius:Style.space(7);iconSize:Style.space(16);tooltipText:root.tr("Settings");foreground:root.secondary;onClicked:root.openSettings()}
+          BoltAction {id:settingsButton;width:Style.space(32);height:Style.space(32);radius:Style.cornerRadius * 2;iconSize:Style.space(16);tooltipText:root.tr("Settings");foreground:root.secondary;onClicked:root.openSettings()}
         }
         Text {
           visible:root.displayDevices.length===0 && root.payload.status!=="loading" && !root.degraded
@@ -291,6 +291,7 @@ Panel {
             width:parent.width
             height:Style.space(28)
             PanelActionButton {
+              radius: Style.cornerRadius * 2
               id:solaarButton
               anchors.left:parent.left
               anchors.verticalCenter:parent.verticalCenter
