@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import qs.Ui
 import qs.Commons
@@ -80,18 +79,19 @@ Column {
           font.family:"sans-serif"
           font.pixelSize:Style.space(13)
         }
-        Controls.TextField {
+        SafeTextField {
           id: input
           Layout.preferredWidth: Style.space(68)
           implicitHeight: Style.space(34)
           text: String(fieldRow.current)
-          selectByMouse:true
           color:Color.popups.text
           font.family:"sans-serif"
           font.pixelSize:Style.space(12)
-          padding:Style.space(7)
+          leftPadding:Style.space(7)
+          rightPadding:Style.space(7)
           Accessible.name:root.tr(fieldRow.modelData.label)
-          background: Rectangle { radius:Style.cornerRadius * 2; color:Qt.alpha(Color.popups.text,0.055); border.width:input.activeFocus?1:0; border.color:Color.accent }
+          background: Rectangle { radius:Style.cornerRadius * 2; color:Qt.alpha(Color.popups.text,0.055); border.width:input.inputActiveFocus?1:0; border.color:Color.accent }
+          onPasteErrorChanged: if (pasteError !== "") root.error = pasteError
           onTextEdited:root.clearError()
           onEditingFinished: {
             if (!visible) return
@@ -100,7 +100,7 @@ Column {
           }
           Keys.onEscapePressed: { text=String(fieldRow.current); root.back() }
           HoverHandler { id:numberHover }
-          PanelToolTip { visible:numberHover.hovered||input.activeFocus; text:fieldRow.modelData.min+"–"+fieldRow.modelData.max; fontFamily:"sans-serif" }
+          PanelToolTip { visible:numberHover.hovered||input.inputActiveFocus; text:fieldRow.modelData.min+"–"+fieldRow.modelData.max; fontFamily:"sans-serif" }
         }
       }
     }

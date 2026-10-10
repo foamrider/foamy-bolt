@@ -33,6 +33,11 @@ sleep or power-off detection may be delayed until the receiver reports it.
 Supports Bolt, Unifying, and Lightspeed receivers. Direct Bluetooth and USB
 devices are not discovered. Pairing and device configuration stay in Solaar.
 
+Settings clipboard paste uses `wl-paste`, `jq`, and `timeout`, provided by Omarchy.
+It accepts at most 16 KiB of plain text and stops clipboard reads after two seconds.
+Oversized, invalid, or unavailable clipboard text leaves the current value unchanged
+and displays an error. Typing, selection, undo, and saving remain available.
+
 ## Remove
 
 ```sh
