@@ -17,6 +17,7 @@ class EventFilterTest(unittest.TestCase):
         self.device = SimpleNamespace(
             online=False, protocol=2.0,
             features=SimpleNamespace(get_feature=Mock(return_value=0x1004)),
+            close=Mock(),
         )
         self.receiver = SimpleNamespace(_devices={1: self.device})
 
@@ -29,6 +30,26 @@ class EventFilterTest(unittest.TestCase):
             self.assertTrue(EVENTS.status_notification(self.event(sub_id), self.receiver))
         self.device.features.get_feature.assert_not_called()
         self.assertEqual(self.receiver._devices, {})
+
+    def test_unpair_releases_device_once_without_unpairing_hardware(self):
+        receiver = Mock(_devices={1: self.device})
+        for _ in range(2):
+            self.assertTrue(EVENTS.status_notification(self.event(0x40), receiver))
+        self.device.close.assert_called_once_with()
+        receiver._unpair_device.assert_not_called()
+        self.assertEqual(receiver._devices, {})
+
+    def test_link_events_do_not_close_device(self):
+        for sub_id in EVENTS.CONNECTION_EVENTS - {0x40}:
+            self.assertTrue(EVENTS.status_notification(self.event(sub_id), self.receiver))
+        self.device.close.assert_not_called()
+        self.assertIs(self.receiver._devices[1], self.device)
+
+    def test_failed_close_keeps_device_available_for_receiver_cleanup(self):
+        self.device.close.side_effect = OSError("cleanup failed")
+        with self.assertRaises(OSError):
+            EVENTS.status_notification(self.event(0x40), self.receiver)
+        self.assertIs(self.receiver._devices[1], self.device)
 
     def test_input_and_receiver_messages_do_not_refresh(self):
         for event in [self.event(0x49), self.event(1, report_id=0x20),

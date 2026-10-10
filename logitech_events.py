@@ -20,8 +20,12 @@ def status_notification(notification, receiver) -> bool:
     if not 1 <= notification.devnumber <= 15:
         return False
     if notification.sub_id in CONNECTION_EVENTS:
-        # Drop only local metadata after unpairing; Receiver.__delitem__ unpairs hardware.
+        # Close local device state to release Solaar's instance registry reference.
+        # Receiver.__delitem__ unpairs hardware, so remove only the cache entry.
         if notification.sub_id == 0x40:
+            device = receiver._devices.get(notification.devnumber)
+            if device is not None:
+                device.close()
             receiver._devices.pop(notification.devnumber, None)
         return True
     if notification.report_id == 0x20 or notification.sub_id >= 0x40:
