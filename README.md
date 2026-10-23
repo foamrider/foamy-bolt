@@ -16,7 +16,7 @@ omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
 ## Use
 
 - Left-click the widget to see your devices and battery levels.
-- Open the cog to choose **List** or **Tiles**, language, and refresh interval.
+- Open the cog to choose **List** or **Tiles**, and refresh interval.
 - Click refresh to update the readings. Right-click the widget to open Solaar.
 
 Mouse and keyboard connection, disconnection, supported battery notifications, and receiver hotplug
@@ -56,3 +56,7 @@ Licensed under [MIT](LICENSE). Omarchy and Lucide notices are in
 [LICENSE-OMARCHY](LICENSE-OMARCHY) and [LICENSE-LUCIDE](LICENSE-LUCIDE).
 
 Provided **as is**, without warranty or guaranteed support. Use at your own risk.
+
+Language follows **Omarchy → Setup → Language** on Omarchy 4.5. Plugin language overrides are no longer used. Omarchy 4.0 displays the plugin in English. Missing translations fall back to English.
+
+Translation checks: `python3 tests/i18n-runtime.py` uses the installed shell. Set `OMARCHY_PATH` to a 4.5 source tree to check live language switching against that version.

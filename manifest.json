@@ -18,7 +18,6 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "language": "system",
       "layout": "list",
       "barPercentage": "low",
       "lowBatteryThreshold": 30,
@@ -27,17 +26,6 @@
       "hideWhenAbsent": true
     },
     "schema": [
-      {
-        "key": "language",
-        "type": "enum",
-        "label": "Language",
-        "defaultValue": "system",
-        "options": [
-          "system",
-          "en",
-          "nb"
-        ]
-      },
       {
         "key": "layout",
         "type": "enum",
