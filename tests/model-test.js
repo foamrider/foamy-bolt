@@ -1,3 +1,4 @@
+const I18n = require('./i18n.cjs');
 const assert=require('node:assert/strict')
 const M=require('../Model.js'), P=require('../Preferences.js'), manifest=require('../manifest.json')
 for(const v of [null,undefined,'0',NaN,Infinity,-1,101,false]) assert.equal(M.battery(v),null)
@@ -9,13 +10,11 @@ const payload={status:'ok',receivers:[{name:'Bolt',productId:'C548'}],devices:[{
 assert.equal(M.parsePayload(JSON.stringify(payload)).devices[0].battery,null)
 for(const raw of ['', 'null','{}',JSON.stringify({...payload,devices:[{name:'Keyboard',online:'true'}]}),JSON.stringify({...payload,errors:[{}]})]) assert.throws(()=>M.parsePayload(raw))
 assert.deepEqual(manifest.barWidget.schema,P.fields)
-for(const f of P.fields){assert.ok(P.valid(f.key,f.defaultValue));assert.equal(P.value({},f.key),manifest.barWidget.defaults[f.key]);assert.notEqual(P.text(f.label,'nb'),f.label)}
+for(const f of P.fields){assert.ok(P.valid(f.key,f.defaultValue));assert.equal(P.value({},f.key),manifest.barWidget.defaults[f.key]);assert.notEqual(I18n.text(f.label,'nb'),f.label)}
 for(const layout of ['list','tiles']) assert.equal(P.valid('layout',layout),true)
 for(const layout of ['',null,'receivers']) assert.equal(P.valid('layout',layout),false)
 assert.equal(P.value({layout:'bad'},'layout'),'list')
 for(const refresh of [0,29,3601,NaN,'60',60.5]) assert.equal(P.valid('refreshSeconds',refresh),false)
-assert.equal(P.language('system','nb_NO'),'nb')
-assert.equal(P.language('en','nb_NO'),'en')
 console.log('ok — unknown battery, online filtering, malformed payloads, schema and List/Tiles preferences')
 
 assert.equal(M.minutesSince(null,180000),null)

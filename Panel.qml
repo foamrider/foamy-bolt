@@ -18,8 +18,8 @@ Panel {
   readonly property color secondary: Qt.tint(Color.popups.background,Qt.alpha(Color.popups.text,0.7))
   readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("logitech_status.py").toString().replace(/^file:\/\//,""))
   function preference(key) { return Preferences.value(settings,key) }
-  readonly property string language: Preferences.language(preference("language"),Qt.locale().name)
-  function tr(label) { return Preferences.text(label,language) }
+  readonly property string language: FoamyI18n.language
+  function tr(label) { return FoamyI18n.t(label) }
   property var payload: ({status:"loading",receivers:[],devices:[],errors:[]})
   readonly property var onlineDevices: payload.devices.filter(function(d) { return d.online })
   readonly property var displayDevices: preference("showOffline") ? payload.devices : onlineDevices

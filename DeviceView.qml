@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
-import "Preferences.js" as Preferences
 
 Rectangle {
   id: root
@@ -20,7 +19,7 @@ Rectangle {
   readonly property string icon: device.kindIcon==="mouse"?"󰍽":device.kindIcon==="keyboard"?"󰌌":device.kindIcon==="headset"?"󰋋":"󰂯"
   readonly property string reading: hasBattery ? level+"%" : "—"
   readonly property string stateText: tr(!online?"Offline":device.charging?"Charging":!hasBattery?"Battery unavailable":low?"Low battery":"Connected")
-  function tr(text) { return Preferences.text(text,language) }
+  function tr(text) { return FoamyI18n.t(text) }
   color: tile ? Qt.alpha(Color.popups.text,0.045) : "transparent"
   radius: Style.cornerRadius * 2
   implicitHeight: tile ? tileContent.implicitHeight+Style.space(30) : Math.max(Style.space(66),listContent.implicitHeight+Style.space(20))
