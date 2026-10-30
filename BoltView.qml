@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import Quickshell
 import qs.Commons
@@ -70,6 +71,17 @@ PanelKeyCatcher {
     else if (key === "solaar") root.solaarRequested()
     else if (key === "refresh") root.refreshRequested()
   }
+  // Keep the keyboard cursor's stop in view when the list scrolls.
+  function stopItem(key) { return key === "details" ? detailsAction : key === "solaar" ? solaarAction : key === "refresh" ? refreshAction : null }
+  function keepVisible(item) {
+    if (!item || !item.visible) return
+    var y = item.mapToItem(listScroll.contentItem, 0, 0).y
+    var margin = FoamyStyle.gap
+    if (y < listScroll.contentY) listScroll.contentY = Math.max(0, y - margin)
+    else if (y + item.height > listScroll.contentY + listScroll.height)
+      listScroll.contentY = Math.max(0, Math.min(listScroll.contentHeight - listScroll.height, y + item.height - listScroll.height + margin))
+  }
+  onCursorKeyChanged: keepVisible(stopItem(cursorKey))
   function focusSettings() { settingsPage.resetScroll(); settingsPage.focusBack() }
   function refreshOptions() {
     var current = Number(setting("refreshSeconds"))
@@ -85,7 +97,7 @@ PanelKeyCatcher {
   implicitHeight: editingSettings ? settingsPage.implicitHeight : list.implicitHeight
   blocked: editingSettings
   onEditingSettingsChanged: cursor.reset()
-  onShownChanged: if (!shown) cursor.reset()
+  onShownChanged: if (!shown) { cursor.reset(); listScroll.contentY = 0 }
 
   FoamyCursor { id: cursor; count: root.stops.length }
   // Ticks once a minute, and only while the popup is shown.
@@ -101,12 +113,17 @@ PanelKeyCatcher {
     else if (text === "o") root.solaarRequested()
   }
 
-  Column {
+  // Header stays put; devices, receiver details and the footer scroll when
+  // they exceed the card (FoamyPopup caps it at popupMaxHeight / the screen).
+  Item {
     id: list
     visible: !root.editingSettings
     width: parent.width
+    height: parent.height
+    implicitHeight: header.implicitHeight + listBody.implicitHeight
 
     FoamyHeader {
+      id: header
       width: parent.width
       // kit has no Lucide "mouse" yet (kit issue filed); "devices" is the closest.
       iconName: "devices"
@@ -117,124 +134,145 @@ PanelKeyCatcher {
       onSettingsHovered: function(hovered) { if (hovered) root.hover("settings") }
     }
 
-    Column {
+    Flickable {
+      id: listScroll
+      objectName: "listScroll"
+      anchors.top: header.bottom
+      anchors.bottom: parent.bottom
       width: parent.width
-      leftPadding: FoamyStyle.padding
-      rightPadding: FoamyStyle.padding
-      bottomPadding: FoamyStyle.padding
-      spacing: FoamyStyle.sectionGap
-      readonly property real inner: width - FoamyStyle.padding * 2
-
-      Text {
-        visible: root.devices.length === 0 && !root.loading && !root.degraded
-        width: parent.inner
-        text: root.emptyText
-        textFormat: Text.PlainText
-        horizontalAlignment: Text.AlignLeft
-        wrapMode: Text.WordWrap
-        color: FoamyPalette.mutedText
-        font.family: FoamyStyle.fontFamily
-        font.pixelSize: FoamyStyle.font.bodySmall
-      }
-
-      GridLayout {
-        id: deviceGrid
-        visible: root.devices.length > 0
-        width: parent.inner
-        columns: root.layout === "tiles" && width >= Style.space(300) ? 2 : 1
-        columnSpacing: FoamyStyle.gapLarge
-        rowSpacing: root.layout === "tiles" ? FoamyStyle.gapLarge : FoamyStyle.gapTiny
-        Repeater {
-          model: root.devices
-          DeviceView {
-            required property var modelData
-            device: modelData
-            threshold: root.setting("lowBatteryThreshold")
-            tile: root.layout === "tiles"
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
-          }
-        }
-      }
+      contentWidth: width
+      contentHeight: listBody.implicitHeight
+      clip: true
+      interactive: contentHeight > height
+      flickableDirection: Flickable.VerticalFlick
+      boundsBehavior: Flickable.StopAtBounds
+      onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
+      onHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
+      Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
 
       Column {
-        visible: root.payload.receivers.length > 0
-        width: parent.inner
-        spacing: FoamyStyle.gapSmall
-        FoamyAction {
-          anchors.left: parent.left  // mirrored in RTL
-          label: FoamyI18n.t("Receiver details")
-          iconName: root.receiverDetails ? "chevron-down" : "chevron-right"
-          foreground: FoamyPalette.secondaryText
-          hasCursor: root.hasCursor("details")
-          onHoveredChanged: if (hovered) root.hover("details")
-          onClicked: root.receiverDetailsToggled()
-        }
-        Repeater {
-          model: root.receiverDetails ? root.payload.receivers : []
-          Text {
-            required property var modelData
-            width: parent.width
-            leftPadding: FoamyStyle.gapLarge
-            text: modelData.productId ? FoamyI18n.t("%1 · %2", [modelData.name, modelData.productId]) : modelData.name
-            textFormat: Text.PlainText
-            horizontalAlignment: Text.AlignLeft
-            wrapMode: Text.WordWrap
-            color: FoamyPalette.secondaryText
-            font.family: FoamyStyle.fontFamily
-            font.pixelSize: FoamyStyle.font.body
-          }
-        }
-      }
+        id: listBody
+        width: parent.width
+        leftPadding: FoamyStyle.padding
+        rightPadding: FoamyStyle.padding
+        bottomPadding: FoamyStyle.padding
+        spacing: FoamyStyle.sectionGap
+        readonly property real inner: width - FoamyStyle.padding * 2
 
-      Text {
-        visible: text !== ""
-        width: parent.inner
-        text: root.payload.errors.map(function(e) { return FoamyI18n.t(e) }).concat(root.launchError ? [root.launchError] : []).join("\n")
-        textFormat: Text.PlainText
-        horizontalAlignment: Text.AlignLeft
-        wrapMode: Text.WordWrap
-        color: Commons.Color.urgent
-        font.family: FoamyStyle.fontFamily
-        font.pixelSize: FoamyStyle.font.body
-        Accessible.role: Accessible.AlertMessage
-        Accessible.name: text
-      }
-
-      Rectangle { width: parent.inner; height: 1; color: FoamyPalette.divider }
-
-      RowLayout {
-        width: parent.inner
-        spacing: FoamyStyle.gapLarge
-        FoamyAction {
-          iconName: "external-link"
-          label: FoamyI18n.t("Solaar")
-          tooltipText: FoamyI18n.t("Open Solaar")
-          foreground: FoamyPalette.secondaryText
-          hasCursor: root.hasCursor("solaar")
-          onHoveredChanged: if (hovered) root.hover("solaar")
-          onClicked: root.solaarRequested()
-        }
         Text {
-          Layout.fillWidth: true
-          horizontalAlignment: Text.AlignRight
-          elide: Text.ElideRight
-          text: root.updatedText
+          visible: root.devices.length === 0 && !root.loading && !root.degraded
+          width: parent.inner
+          text: root.emptyText
           textFormat: Text.PlainText
-          color: FoamyPalette.secondaryText
+          horizontalAlignment: Text.AlignLeft
+          wrapMode: Text.WordWrap
+          color: FoamyPalette.mutedText
           font.family: FoamyStyle.fontFamily
           font.pixelSize: FoamyStyle.font.bodySmall
         }
-        FoamyAction {
-          iconName: "refresh-cw"
-          foreground: FoamyPalette.secondaryText
-          tooltipText: FoamyI18n.t(root.refreshing ? "Refreshing…" : "Refresh")
-          actionEnabled: !root.refreshing
-          spinning: root.shown && !root.editingSettings && root.refreshing
-          hasCursor: root.hasCursor("refresh")
-          onHoveredChanged: if (hovered) root.hover("refresh")
-          onClicked: root.refreshRequested()
+
+        GridLayout {
+          id: deviceGrid
+          visible: root.devices.length > 0
+          width: parent.inner
+          columns: root.layout === "tiles" && width >= Style.space(300) ? 2 : 1
+          columnSpacing: FoamyStyle.gapLarge
+          rowSpacing: root.layout === "tiles" ? FoamyStyle.gapLarge : FoamyStyle.gapTiny
+          Repeater {
+            model: root.devices
+            DeviceView {
+              required property var modelData
+              device: modelData
+              threshold: root.setting("lowBatteryThreshold")
+              tile: root.layout === "tiles"
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
+            }
+          }
+        }
+
+        Column {
+          visible: root.payload.receivers.length > 0
+          width: parent.inner
+          spacing: FoamyStyle.gapSmall
+          FoamyAction {
+            id: detailsAction
+            anchors.left: parent.left  // mirrored in RTL
+            label: FoamyI18n.t("Receiver details")
+            iconName: root.receiverDetails ? "chevron-down" : "chevron-right"
+            foreground: FoamyPalette.secondaryText
+            hasCursor: root.hasCursor("details")
+            onHoveredChanged: if (hovered) root.hover("details")
+            onClicked: root.receiverDetailsToggled()
+          }
+          Repeater {
+            model: root.receiverDetails ? root.payload.receivers : []
+            Text {
+              required property var modelData
+              width: parent.width
+              leftPadding: FoamyStyle.gapLarge
+              text: modelData.productId ? FoamyI18n.t("%1 · %2", [modelData.name, modelData.productId]) : modelData.name
+              textFormat: Text.PlainText
+              horizontalAlignment: Text.AlignLeft
+              wrapMode: Text.WordWrap
+              color: FoamyPalette.secondaryText
+              font.family: FoamyStyle.fontFamily
+              font.pixelSize: FoamyStyle.font.body
+            }
+          }
+        }
+
+        Text {
+          visible: text !== ""
+          width: parent.inner
+          text: root.payload.errors.map(function(e) { return FoamyI18n.t(e) }).concat(root.launchError ? [root.launchError] : []).join("\n")
+          textFormat: Text.PlainText
+          horizontalAlignment: Text.AlignLeft
+          wrapMode: Text.WordWrap
+          color: Commons.Color.urgent
+          font.family: FoamyStyle.fontFamily
+          font.pixelSize: FoamyStyle.font.body
+          Accessible.role: Accessible.AlertMessage
+          Accessible.name: text
+        }
+
+        Rectangle { width: parent.inner; height: 1; color: FoamyPalette.divider }
+
+        RowLayout {
+          width: parent.inner
+          spacing: FoamyStyle.gapLarge
+          FoamyAction {
+            id: solaarAction
+            iconName: "external-link"
+            label: FoamyI18n.t("Solaar")
+            tooltipText: FoamyI18n.t("Open Solaar")
+            foreground: FoamyPalette.secondaryText
+            hasCursor: root.hasCursor("solaar")
+            onHoveredChanged: if (hovered) root.hover("solaar")
+            onClicked: root.solaarRequested()
+          }
+          Text {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideRight
+            text: root.updatedText
+            textFormat: Text.PlainText
+            color: FoamyPalette.secondaryText
+            font.family: FoamyStyle.fontFamily
+            font.pixelSize: FoamyStyle.font.bodySmall
+          }
+          FoamyAction {
+            id: refreshAction
+            iconName: "refresh-cw"
+            foreground: FoamyPalette.secondaryText
+            tooltipText: FoamyI18n.t(root.refreshing ? "Refreshing…" : "Refresh")
+            actionEnabled: !root.refreshing
+            spinning: root.shown && !root.editingSettings && root.refreshing
+            hasCursor: root.hasCursor("refresh")
+            onHoveredChanged: if (hovered) root.hover("refresh")
+            onClicked: root.refreshRequested()
+          }
         }
       }
     }
