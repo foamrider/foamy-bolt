@@ -1,30 +1,33 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
+import "kit"
 import "Model.js" as Model
 
+// One device as a list row or a tile. Display only: device settings stay in Solaar.
 Rectangle {
   id: root
   required property var device
-  required property string language
   property bool tile: false
   property int threshold: 30
   readonly property var level: Model.battery(device.battery)
-  readonly property bool online: device.online===true
-  readonly property bool hasBattery: online && level!==null
-  readonly property bool low: hasBattery && level<threshold
-  readonly property color secondary: Qt.tint(Color.popups.background,Qt.alpha(Color.popups.text,0.7))
-  readonly property color levelColor: low ? Color.urgent : Color.accent
-  readonly property string icon: device.kindIcon==="mouse"?"󰍽":device.kindIcon==="keyboard"?"󰌌":device.kindIcon==="headset"?"󰋋":"󰂯"
-  readonly property string reading: hasBattery ? level+"%" : "—"
-  readonly property string stateText: tr(!online?"Offline":device.charging?"Charging":!hasBattery?"Battery unavailable":low?"Low battery":"Connected")
-  function tr(text) { return FoamyI18n.t(text) }
-  color: tile ? Qt.alpha(Color.popups.text,0.045) : "transparent"
-  radius: Style.cornerRadius * 2
-  implicitHeight: tile ? tileContent.implicitHeight+Style.space(30) : Math.max(Style.space(66),listContent.implicitHeight+Style.space(20))
+  readonly property bool online: device.online === true
+  readonly property bool hasBattery: online && level !== null
+  readonly property bool low: hasBattery && level < threshold
+  readonly property color nameColor: online ? FoamyPalette.text : FoamyPalette.secondaryText
+  readonly property color readingColor: low ? Commons.Color.urgent : nameColor
+  readonly property color levelColor: low ? Commons.Color.urgent : Commons.Color.accent
+  readonly property string icon: device.kindIcon === "mouse" ? "󰍽" : device.kindIcon === "keyboard" ? "󰌌" : device.kindIcon === "headset" ? "󰋋" : "󰂯"
+  readonly property string reading: hasBattery ? FoamyI18n.t("%1%", level) : "—"
+  readonly property string stateText: FoamyI18n.t(!online ? "Offline" : device.charging ? "Charging" : !hasBattery ? "Battery unavailable" : low ? "Low battery" : "Connected")
+
+  color: tile ? FoamyPalette.fieldFill : "transparent"
+  radius: FoamyStyle.radius
+  implicitHeight: tile ? tileContent.implicitHeight + FoamyStyle.padding + FoamyStyle.gapLarge : Math.max(Style.space(60), listContent.implicitHeight + FoamyStyle.padding)
   Accessible.role: Accessible.StaticText
-  Accessible.name: device.name+", "+stateText+(hasBattery?", "+reading:"")
+  Accessible.name: device.name + ", " + stateText + (hasBattery ? ", " + reading : "")
 
   RowLayout {
     id: listContent
@@ -32,47 +35,51 @@ Rectangle {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    spacing: Style.space(12)
-    OpticalGlyph { text:root.icon; fontFamily:Style.font.family; fontSize:Style.space(19); color:root.online?Color.popups.text:root.secondary; width:Style.space(24); height:Style.space(24) }
+    spacing: FoamyStyle.gapLarge
+    OpticalGlyph { text: root.icon; fontFamily: Style.font.family; fontSize: FoamyStyle.font.iconLarge; color: root.nameColor; width: Style.space(24); height: Style.space(24) }
     ColumnLayout {
       Layout.fillWidth: true
-      spacing: Style.space(5)
-      Text { Layout.fillWidth:true; text:root.device.name; textFormat:Text.PlainText; color:root.online?Color.popups.text:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(13); elide:Text.ElideRight }
-      Text { Layout.fillWidth:true; text:root.stateText; color:root.low?Color.urgent:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(11); elide:Text.ElideRight }
+      spacing: FoamyStyle.gapSmall
+      Text { Layout.fillWidth: true; text: root.device.name; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.nameColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle; elide: Text.ElideRight }
+      Text { Layout.fillWidth: true; text: root.stateText; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.bodySmall; elide: Text.ElideRight }
       Rectangle {
-        visible:root.hasBattery
-        Layout.fillWidth:true
-        implicitHeight:Style.space(4)
-        radius:height/2
-        color:Qt.alpha(Color.popups.text,0.12)
-        Rectangle { width:parent.width*(root.level || 0)/100; height:parent.height; radius:parent.radius; color:root.levelColor }
+        visible: root.hasBattery
+        Layout.fillWidth: true
+        implicitHeight: FoamyStyle.gapSmall
+        radius: height / 2
+        color: FoamyPalette.divider
+        // Anchored, so the fill starts at the reading edge in RTL too.
+        Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width * (root.level || 0) / 100; radius: parent.radius; color: root.levelColor }
       }
     }
-    Text { text:root.reading; color:root.low?Color.urgent:root.online?Color.popups.text:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(13) }
+    Text { text: root.reading; textFormat: Text.PlainText; color: root.readingColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle }
   }
+
   Column {
     id: tileContent
-    visible:root.tile
-    anchors.left:parent.left
-    anchors.right:parent.right
-    anchors.top:parent.top
-    anchors.margins:Style.space(14)
-    spacing:Style.space(8)
-    OpticalGlyph { text:root.icon; fontFamily:Style.font.family; fontSize:Style.space(20); color:root.online?Color.popups.text:root.secondary; width:Style.space(24); height:Style.space(24) }
-    Text { text:root.reading; color:root.low?Color.urgent:root.online?Color.popups.text:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(28) }
+    visible: root.tile
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.margins: FoamyStyle.sectionGap
+    spacing: FoamyStyle.gap
+    OpticalGlyph { text: root.icon; fontFamily: Style.font.family; fontSize: FoamyStyle.font.iconLarge; color: root.nameColor; width: Style.space(24); height: Style.space(24) }
+    Text { width: parent.width; text: root.reading; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.readingColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.displayLarge }
     // Reserve two name lines so paired tiles keep readings and tracks aligned.
-    FontMetrics { id:nameMetrics; font.family:"sans-serif"; font.pixelSize:Style.space(13) }
-    Text { width:parent.width; height:Math.ceil(nameMetrics.height)*2+Style.space(4); text:root.device.name; textFormat:Text.PlainText; color:root.online?Color.popups.text:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(13); wrapMode:Text.WordWrap; maximumLineCount:2; elide:Text.ElideRight }
-    Text { width:parent.width; text:root.stateText; color:root.low?Color.urgent:root.secondary; font.family:"sans-serif"; font.pixelSize:Style.space(11); wrapMode:Text.WordWrap }
+    FontMetrics { id: nameMetrics; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle }
+    Text { width: parent.width; height: Math.ceil(nameMetrics.height) * 2 + FoamyStyle.gapSmall; text: root.device.name; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.nameColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
+    Text { width: parent.width; text: root.stateText; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.bodySmall; wrapMode: Text.WordWrap }
     Rectangle {
-      width:parent.width
-      visible:root.hasBattery
-      height:Style.space(4)
-      radius:height/2
-      color:Qt.alpha(Color.popups.text,0.12)
-      Rectangle { width:parent.width*(root.level || 0)/100; height:parent.height; radius:parent.radius; color:root.levelColor }
+      width: parent.width
+      visible: root.hasBattery
+      height: FoamyStyle.gapSmall
+      radius: height / 2
+      color: FoamyPalette.divider
+      // Anchored, so the fill starts at the reading edge in RTL too.
+        Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width * (root.level || 0) / 100; radius: parent.radius; color: root.levelColor }
     }
   }
-  HoverHandler { id:hover }
-  PanelToolTip { visible:hover.hovered; text:root.device.name+" · "+root.stateText; fontFamily:"sans-serif" }
+
+  HoverHandler { id: hover }
+  PanelToolTip { visible: hover.hovered; text: root.device.name + " · " + root.stateText; fontFamily: FoamyStyle.fontFamily }
 }

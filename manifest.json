@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "foamy.bolt",
   "name": "Foamy Bolt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "foamrider",
   "description": "Logitech receiver and battery status with List and Tiles layouts",
   "kinds": [
@@ -21,7 +21,7 @@
       "layout": "list",
       "barPercentage": "low",
       "lowBatteryThreshold": 30,
-      "refreshSeconds": 60,
+      "refreshSeconds": 300,
       "showOffline": false,
       "hideWhenAbsent": true
     },
@@ -39,7 +39,7 @@
       {
         "key": "barPercentage",
         "type": "enum",
-        "label": "Bar percentage",
+        "label": "Show battery in the bar",
         "defaultValue": "low",
         "options": [
           "low",
@@ -59,8 +59,8 @@
       {
         "key": "refreshSeconds",
         "type": "integer",
-        "label": "Refresh interval (seconds)",
-        "defaultValue": 60,
+        "label": "Refresh every",
+        "defaultValue": 300,
         "min": 30,
         "max": 3600,
         "step": 30
