@@ -1,15 +1,22 @@
 import importlib.util
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 
-SPEC = importlib.util.spec_from_file_location(
-    "logitech_events", Path(__file__).resolve().parents[1] / "logitech_events.py"
-)
+HELPER = Path(__file__).resolve().parents[1] / "logitech_events.py"
+SPEC = importlib.util.spec_from_file_location("logitech_events", HELPER)
 EVENTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVENTS)
+STATUS = EVENTS.STATUS
 
 
 class EventFilterTest(unittest.TestCase):
@@ -113,11 +120,172 @@ class EventFilterTest(unittest.TestCase):
         self.assertFalse(changes.accept(self.event(7), {1: self.device}))
         self.assertTrue(changes.accept(self.event(7, data=b"\x30\x00\x00"), {1: self.device}))
 
-    def test_unavailable_backend_is_reported_without_private_details(self):
-        with patch.object(EVENTS, "watch", side_effect=OSError("/dev/private")), \
-                patch.object(EVENTS, "emit") as emit, patch.object(EVENTS.logging, "disable"):
-            self.assertEqual(EVENTS.main(), 1)
-        emit.assert_called_once_with("health", error=EVENTS.WATCH_ERROR)
+    def test_unpair_without_private_device_cache_still_refreshes(self):
+        receiver = SimpleNamespace()  # a Solaar release that renamed _devices
+        self.assertTrue(EVENTS.status_notification(self.event(0x40), receiver))
+
+
+class FakeEmitter:
+    def __init__(self):
+        self.events = []
+        self.changed = threading.Condition()
+
+    def emit(self, event, **fields):
+        with self.changed:
+            self.events.append({"event": event, **fields})
+            self.changed.notify_all()
+
+    def wait(self, predicate, timeout=5):
+        with self.changed:
+            return self.changed.wait_for(lambda: predicate(self.events), timeout)
+
+    def statuses(self):
+        return [e for e in self.events if e["event"] == "status"]
+
+
+def poll_only_api(receivers=()):
+    base = SimpleNamespace(receivers=lambda: list(receivers))
+    return SimpleNamespace(base=base, receiver=SimpleNamespace(create_receiver=lambda b, i: None),
+                           version="9.9", events=None, events_missing=["listener.EventsListener"])
+
+
+class HelperTest(unittest.TestCase):
+    def start(self, helper):
+        thread = threading.Thread(target=lambda: setattr(self, "rc", helper.run()), daemon=True)
+        thread.start()
+        return thread
+
+    def test_snapshot_at_start_and_on_refresh_then_eof_stops(self):
+        emitter = FakeEmitter()
+        read_fd, write_fd = os.pipe()
+        stdin, commands = os.fdopen(read_fd), os.fdopen(write_fd, "w")
+        helper = EVENTS.Helper(poll_only_api(), emitter, stdin=stdin)
+        thread = self.start(helper)
+        self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
+        self.assertEqual(emitter.statuses()[0]["payload"]["status"], "absent")
+        commands.write("refresh\nignored\n"); commands.flush()
+        self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
+        commands.close()  # the shell went away
+        thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(self.rc, 0)
+
+    def test_missing_event_api_reports_health_with_detail_but_keeps_snapshots(self):
+        emitter = FakeEmitter()
+        helper = EVENTS.Helper(poll_only_api(), emitter)
+        thread = self.start(helper)
+        self.assertTrue(emitter.wait(lambda e: any(x["event"] == "health" for x in e)))
+        health = next(x for x in emitter.events if x["event"] == "health")
+        self.assertEqual(health["error"], EVENTS.WATCH_ERROR)
+        self.assertEqual(health["detail"], "Solaar 9.9: missing listener.EventsListener")
+        helper.stop(); thread.join(5)
+        self.assertEqual(self.rc, 0)
+
+    def test_change_bursts_are_coalesced_into_one_snapshot(self):
+        emitter = FakeEmitter()
+        helper = EVENTS.Helper(poll_only_api(), emitter)
+        thread = self.start(helper)
+        self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
+        for _ in range(20):
+            helper.mark_changed()
+        self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
+        time.sleep(EVENTS.DEBOUNCE * 3)
+        self.assertEqual(len(emitter.statuses()), 2)
+        helper.stop(); thread.join(5)
+
+    def test_refresh_during_a_query_runs_once_more_afterwards(self):
+        emitter = FakeEmitter()
+        gate = threading.Event()
+        calls = []
+        def receivers():
+            calls.append(1)
+            if len(calls) == 1:
+                gate.wait(5)
+            return []
+        api = poll_only_api()
+        api.base.receivers = receivers
+        helper = EVENTS.Helper(api, emitter)
+        thread = self.start(helper)
+        time.sleep(0.2)
+        helper.request(); helper.request()
+        gate.set()
+        self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
+        time.sleep(0.3)
+        self.assertEqual(len(calls), 2)
+        helper.stop(); thread.join(5)
+
+    def test_borrowed_receivers_are_only_ready_live_listeners(self):
+        helper = EVENTS.Helper(poll_only_api(), FakeEmitter())
+        ready = SimpleNamespace(ready=True, failed=False, is_alive=lambda: True, receiver="r1", guard="g1")
+        starting = SimpleNamespace(ready=False, failed=False, is_alive=lambda: True, receiver="r2", guard="g2")
+        helper.listeners = {"/a": ready, "/b": starting}
+        self.assertEqual(helper.borrowed(), {"/a": ("r1", "g1")})
+
+
+class HelperProcessTest(unittest.TestCase):
+    """The real script in a subprocess against a fake Solaar package."""
+
+    def run_helper(self, files, timeout=10):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "logitech_receiver"
+            package.mkdir()
+            for name, text in files.items():
+                (package / name).write_text(text)
+            env = dict(os.environ, PYTHONPATH=directory, XDG_RUNTIME_DIR=directory)
+            process = subprocess.Popen([sys.executable, str(HELPER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, env=env, text=True)
+            events = []
+            try:
+                # Two snapshots (start, then `refresh`), then close stdin as the shell would.
+                deadline = time.monotonic() + timeout
+                while time.monotonic() < deadline:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    events.append(json.loads(line))
+                    statuses = len([e for e in events if e["event"] == "status"])
+                    if statuses == 1 and events[-1]["event"] == "status":
+                        try:
+                            process.stdin.write("refresh\n"); process.stdin.flush()
+                        except BrokenPipeError:
+                            pass  # exit-code cases stop on their own
+                    if statuses == 2:
+                        break
+                try:
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
+                events += [json.loads(line) for line in process.stdout.read().splitlines()]
+                return process.wait(timeout), events
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+                process.stdout.close()
+
+    def test_stray_prints_never_reach_the_protocol_and_eof_stops(self):
+        rc, events = self.run_helper({
+            "__init__.py": "print('noise from solaar')\n",
+            "base.py": "def receivers():\n    print('more noise')\n    return []\n",
+            "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
+        })
+        self.assertEqual(rc, 0)
+        statuses = [e for e in events if e["event"] == "status"]
+        self.assertEqual(len(statuses), 2)
+        self.assertTrue(all(s["payload"]["status"] == "absent" for s in statuses))
+
+    def test_moved_snapshot_api_exits_for_backoff_with_a_clear_error(self):
+        rc, events = self.run_helper({"__init__.py": "", "base.py": "", "receiver.py": ""})
+        self.assertEqual(rc, EVENTS.EXIT_UNAVAILABLE)
+        self.assertEqual(events[0]["payload"]["errors"], [STATUS.UNSUPPORTED_ERROR])
+        self.assertIn("base.receivers", events[1]["detail"])
+        self.assertIn("receiver.create_receiver", events[1]["detail"])
+
+    def test_missing_solaar_exits_for_backoff(self):
+        rc, events = self.run_helper({"__init__.py": "raise ImportError('no solaar')\n"})
+        self.assertEqual(rc, EVENTS.EXIT_UNAVAILABLE)
+        self.assertEqual(events[0]["payload"]["status"], "unavailable")
+        self.assertEqual(events[0]["payload"]["errors"], [STATUS.MISSING_ERROR])
 
 
 if __name__ == "__main__":
