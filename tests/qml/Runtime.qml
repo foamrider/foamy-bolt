@@ -155,6 +155,7 @@ ShellRoot {
     eq(mockBar.saved.length, 1, "invalid value not saved")
     check(first.prefs.error !== "", "invalid value reported")
     check(view.settingsError !== "", "the settings page shows it")
+    shell.thresholdChecks(first, view)
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
     first.close()
@@ -218,6 +219,49 @@ ShellRoot {
 
   // The device list scrolls when it is taller than the card, and the keyboard
   // cursor keeps its stop in view.
+  // The low-battery field (kit FoamyNumberField) never assigns over its bound
+  // value: external changes show while Settings is open, focusing through
+  // without typing saves nothing, Escape restores and stays on Settings, and a
+  // valid changed number is saved once.
+  function thresholdChecks(first, view) {
+    var field = shell.findByName(view, "thresholdInput")
+    check(field !== null && field.field !== undefined, "threshold is a FoamyNumberField")
+    if (!field) return
+    eq(field.field.text, "30", "shows the saved threshold")
+    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 20 })
+    eq(field.field.text, "20", "an external change shows while Settings is open")
+    var saves = mockBar.saved.length
+    field.field.focusInput()
+    field.field.editingFinished()
+    view.forceActiveFocus()
+    field.field.editingFinished()
+    eq(mockBar.saved.length, saves, "tabbing through the unchanged field saves nothing")
+    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 25 })
+    eq(field.field.text, "25", "a second external change still shows (binding intact)")
+    field.field.text = "45"
+    field.field.textEdited()
+    // The editor's key path (keyPressed → handleKey); the handler marks the key
+    // accepted when handleKey returns true, so FoamySettingsPage never sees it.
+    field.field.keyPressed({ key: Qt.Key_Escape, accepted: false })
+    eq(field.handleKey(Qt.Key_Escape), true, "Escape is consumed by the field")
+    eq(field.field.text, "25", "Escape restores the saved value")
+    eq(first.editingSettings, true, "and stays on Settings")
+    eq(mockBar.saved.length, saves, "Escape saves nothing")
+    field.field.text = "15"
+    field.field.textEdited()
+    field.field.accepted()
+    eq(mockBar.saved.length, saves + 1, "a changed number is saved once")
+    if (mockBar.saved.length === saves + 1) eq(mockBar.saved[saves].settings.lowBatteryThreshold, 15, "saved threshold")
+    field.field.editingFinished()
+    eq(mockBar.saved.length, saves + 1, "not saved twice")
+    field.field.text = "150"
+    field.field.textEdited()
+    field.field.accepted()
+    eq(mockBar.saved.length, saves + 1, "out-of-range number not saved")
+    check(field.error !== "", "out-of-range number explained")
+    field.handleKey(Qt.Key_Escape)
+  }
+
   function checkScroll() {
     var list = shell.findByName(tallView, "listScroll")
     check(list !== null, "list has a scroll container")

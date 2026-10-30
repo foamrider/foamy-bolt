@@ -41,7 +41,6 @@ PanelKeyCatcher {
   signal receiverDetailsToggled()
   signal saveRequested(string key, var value)
   signal retryRequested()
-  signal errorCleared()
   signal switchPanelRequested(int direction)
 
   readonly property bool loading: payload.status === "loading"
@@ -308,38 +307,20 @@ PanelKeyCatcher {
         enabled: !root.saving
         onClicked: root.saveRequested("showOffline", !checked)
       }
-      RowLayout {
+      // Kit field: shows the bound setting while not editing (external changes
+      // appear), commits only a valid changed number, Escape restores and stays.
+      FoamyNumberField {
+        id: thresholdInput
+        objectName: "thresholdInput"
         width: parent.width
-        spacing: FoamyStyle.gapLarge
-        Text {
-          Layout.fillWidth: true
-          text: FoamyI18n.t("Low battery below (%)")
-          textFormat: Text.PlainText
-          horizontalAlignment: Text.AlignLeft
-          wrapMode: Text.WordWrap
-          color: FoamyPalette.text
-          font.family: FoamyStyle.fontFamily
-          font.pixelSize: FoamyStyle.font.subtitle
-        }
-        SafeTextField {
-          id: thresholdInput
-          Layout.preferredWidth: Style.space(68)
-          implicitHeight: FoamyStyle.controlHeight
-          enabled: !root.saving
-          text: String(root.setting("lowBatteryThreshold"))
-          horizontalAlignment: Text.AlignHCenter
-          translate: FoamyI18n.t
-          Accessible.name: FoamyI18n.t("Low battery below (%)")
-          onTextEdited: root.errorCleared()
-          onEditingFinished: {
-            if (!visible) return
-            var next = text.trim() === "" ? NaN : Number(text)
-            if (next !== root.setting("lowBatteryThreshold")) root.saveRequested("lowBatteryThreshold", next)
-          }
-          Keys.onEscapePressed: { text = String(root.setting("lowBatteryThreshold")); root.settingsClosed() }
-          HoverHandler { id: thresholdHover }
-          PanelToolTip { visible: thresholdHover.hovered || thresholdInput.inputActiveFocus; text: FoamyI18n.t("%1–%2", [1, 100]); fontFamily: FoamyStyle.fontFamily }
-        }
+        enabled: !root.saving
+        label: FoamyI18n.t("Low battery below")
+        unit: "%"
+        value: root.setting("lowBatteryThreshold")
+        from: 1
+        to: 100
+        stepSize: 5
+        onCommitted: function(v) { root.saveRequested("lowBatteryThreshold", v) }
       }
     }
 

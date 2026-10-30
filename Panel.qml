@@ -171,7 +171,6 @@ Panel {
         onReceiverDetailsToggled: root.receiverDetails = !root.receiverDetails
         onSaveRequested: function(key, value) { root.save(key, value) }
         onRetryRequested: prefs.retry()
-        onErrorCleared: if (!prefs.busy && !prefs.canRetry) prefs.error = ""
         onSwitchPanelRequested: function(direction) { root.switchPanel(direction) }
       }
     }

@@ -17,7 +17,6 @@
   "%1 · %2": "%1 · %2",
   "%1 %2": "%1 %2",
   "%1%": "%1%",
-  "%1–%2": "%1–%2",
   "Solaar": "Solaar",
   "Open Solaar": "Open Solaar",
   "Could not start Solaar.": "Could not start Solaar.",
@@ -79,5 +78,7 @@
   "Clipboard paste timed out. Copy the text again.": "Clipboard paste timed out. Copy the text again.",
   "Clipboard text is too large or contains invalid characters.": "Clipboard text is too large or contains invalid characters.",
   "Could not paste clipboard text. Copy plain text and try again.": "Could not paste clipboard text. Copy plain text and try again.",
-  "Device readings stopped. Retrying automatically.": "Device readings stopped. Retrying automatically."
+  "Device readings stopped. Retrying automatically.": "Device readings stopped. Retrying automatically.",
+  "Low battery below": "Low battery below",
+  "Enter a number from %1 to %2": "Enter a number from %1 to %2"
 }
