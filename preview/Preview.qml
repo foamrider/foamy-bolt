@@ -8,7 +8,7 @@ Item {
   id: preview
   required property QtObject bar
   required property Item anchorItem
-  property var previewStates: ["list", "tiles", "empty", "error", "settings", "overflow", "overflow-end", "stopped"]
+  property var previewStates: ["list", "tiles", "empty", "error", "settings", "stopped", "overflow", "overflow-end"]
   property string previewState: "list"
   readonly property Item popup: popup
 
@@ -43,12 +43,14 @@ Item {
         onlineCount: preview.payload.devices.length
         id: view
         // overflow-end: the keyboard cursor on Refresh scrolls the footer into view.
-        Connections {
-          target: preview
-          function onPreviewStateChanged() {
-            if (preview.previewState === "overflow-end") for (var i = 0; i < 4; i++) view.moveRequested(0, 1)
-          }
+        // Applied after layout settles, whether the state is set before or after the body exists.
+        Timer {
+          id: cursorTimer
+          interval: 150
+          onTriggered: if (preview.previewState === "overflow-end" && view.cursorKey !== "refresh") for (var i = 0; i < 4; i++) view.moveRequested(0, 1)
         }
+        Connections { target: preview; function onPreviewStateChanged() { cursorTimer.restart() } }
+        Component.onCompleted: cursorTimer.restart()
         settings: ({ layout: preview.previewState === "tiles" || preview.overflow ? "tiles" : "list", barPercentage: "low", lowBatteryThreshold: 30,
                      refreshSeconds: 300, showOffline: false, hideWhenAbsent: true })
         editingSettings: preview.previewState === "settings"
