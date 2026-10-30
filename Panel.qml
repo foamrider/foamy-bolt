@@ -5,7 +5,6 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "kit"
-import "kit/FoamyPrefs.js" as Prefs
 import "Preferences.js" as Schema
 import "Model.js" as Model
 
@@ -25,22 +24,19 @@ Panel {
   // Nerd Font bolt (U+F0E7), escaped so editors and terminals can't drop the private-use glyph.
   readonly property string barGlyph: "\uf0e7"
 
-  // Saved values show right away, before the host hands back new settings.
-  property var pendingSettings: ({})
-  readonly property var effectiveSettings: mergedSettings()
-  readonly property var preferences: Prefs.values(Schema.fields, effectiveSettings)
-  function mergedSettings() {
-    var out = {}
-    var key
-    for (key in (settings || {})) out[key] = settings[key]
-    for (key in pendingSettings) out[key] = pendingSettings[key]
-    return out
+  // Saves go through one queue (inline, else the CLI one at a time); saved
+  // values show right away, before the host hands back new settings.
+  FoamyPrefsQueue {
+    id: prefs
+    bar: root.bar
+    moduleName: root.moduleName
+    fields: Schema.fields
+    settings: root.settings
   }
-  onSettingsChanged: {
-    var left = {}
-    for (var key in pendingSettings) if (!settings || JSON.stringify(settings[key]) !== JSON.stringify(pendingSettings[key])) left[key] = pendingSettings[key]
-    pendingSettings = left
-  }
+  readonly property alias prefs: prefs
+  readonly property var preferences: prefs.values()
+  readonly property alias settingsState: settingsState
+  FoamySettingsState { id: settingsState; panel: root }
 
   readonly property var payload: BoltService.payload
   readonly property var onlineDevices: payload.devices.filter(function(d) { return d.online })
@@ -50,12 +46,8 @@ Panel {
   readonly property bool degraded: ["error", "partial", "unavailable"].indexOf(payload.status) >= 0
   readonly property bool showPercentage: lowestBattery !== null && (preferences.barPercentage === "always" || preferences.barPercentage === "low" && lowBattery)
 
-  property bool editingSettings: false
+  readonly property bool editingSettings: settingsState.editing
   property bool receiverDetails: false
-  property bool saving: false
-  property string settingsError: ""
-  property var lastSave: null
-  property var saveQueue: []
   property string launchError: ""
 
   visible: opened || !preferences.hideWhenAbsent || payload.status !== "absent"
@@ -94,54 +86,14 @@ Panel {
   function refresh(force) { BoltService.refresh(force === true) }
 
   function openSettings() {
-    editingSettings = true
-    open()
+    settingsState.show()
     Qt.callLater(function() { if (popup.bodyItem && root.editingSettings) popup.bodyItem.focusSettings() })
   }
   function closeSettings() {
-    editingSettings = false
+    settingsState.hide()
     Qt.callLater(function() { if (popup.bodyItem) popup.bodyItem.forceActiveFocus() })
   }
-
-  function save(key, value) {
-    settingsError = ""
-    lastSave = { key: key, value: value }
-    var result = Prefs.save(root.bar, root.moduleName, Schema.fields, effectiveSettings, key, value)
-    // Invalid values are not retryable; failed writes are.
-    if (!result.ok) { settingsError = FoamyI18n.t(result.error); lastSave = null; return }
-    if (!result.changed) return
-    var next = {}
-    for (var k in pendingSettings) next[k] = pendingSettings[k]
-    next[key] = value
-    pendingSettings = next
-    if (result.command.length === 0) { lastSave = null; return }
-    // Run CLI saves one at a time so rapid edits cannot race.
-    saveQueue = saveQueue.concat([result.command])
-    runSaves()
-  }
-  function runSaves() {
-    if (saveProcess.running || saveQueue.length === 0) return
-    saving = true
-    saveProcess.command = saveQueue[0]
-    saveQueue = saveQueue.slice(1)
-    saveProcess.running = true
-  }
-  function retrySave() { if (lastSave) save(lastSave.key, lastSave.value) }
-
-  Process {
-    id: saveProcess
-    onExited: function(code) {
-      if (code !== 0) {
-        root.settingsError = FoamyI18n.t("Couldn't save the setting.")
-        root.pendingSettings = ({})
-        root.saveQueue = []
-      } else if (root.saveQueue.length === 0) {
-        root.lastSave = null
-      }
-      root.saving = root.saveQueue.length > 0
-      Qt.callLater(root.runSaves)
-    }
-  }
+  function save(key, value) { return prefs.save(key, value) }
 
   function tooltip() {
     var brand = FoamyI18n.t("Logitech")
@@ -165,11 +117,8 @@ Panel {
     }
   }
 
-  onOpenedChanged: {
-    if (!opened) { editingSettings = false; return }
-    // Opening asks the running helper for a fresh reading.
-    refresh(false)
-  }
+  // Opening asks the running helper for a fresh reading (settingsState resets on close).
+  onOpenedChanged: if (opened) refresh(false)
 
   WidgetButton {
     id: button
@@ -207,9 +156,9 @@ Panel {
         settings: root.preferences
         shown: root.opened
         editingSettings: root.editingSettings
-        saving: root.saving
-        settingsError: root.settingsError
-        retryable: root.settingsError !== "" && root.lastSave !== null
+        saving: prefs.busy
+        settingsError: prefs.error ? FoamyI18n.t(prefs.error) : ""
+        retryable: prefs.canRetry
         refreshing: BoltService.refreshing
         lastUpdatedAt: BoltService.lastUpdatedAt
         launchError: root.launchError
@@ -221,8 +170,8 @@ Panel {
         onSolaarRequested: root.openSolaar()
         onReceiverDetailsToggled: root.receiverDetails = !root.receiverDetails
         onSaveRequested: function(key, value) { root.save(key, value) }
-        onRetryRequested: root.retrySave()
-        onErrorCleared: if (!root.saving) root.settingsError = ""
+        onRetryRequested: prefs.retry()
+        onErrorCleared: if (!prefs.busy && !prefs.canRetry) prefs.error = ""
         onSwitchPanelRequested: function(direction) { root.switchPanel(direction) }
       }
     }

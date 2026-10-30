@@ -19,8 +19,8 @@ Rectangle {
   readonly property color nameColor: online ? FoamyPalette.text : FoamyPalette.secondaryText
   readonly property color readingColor: low ? Commons.Color.urgent : nameColor
   readonly property color levelColor: low ? Commons.Color.urgent : Commons.Color.accent
-  // Nerd Font glyphs, escaped so editors and tools can't strip them.
-  readonly property string icon: device.kindIcon === "mouse" ? "\u{f037d}" : device.kindIcon === "keyboard" ? "\u{f030c}" : device.kindIcon === "headset" ? "\u{f02cb}" : "\u{f00af}"
+  // Lucide icons from the kit (one icon set across foamy plugins).
+  readonly property string icon: device.kindIcon === "mouse" ? "mouse" : device.kindIcon === "keyboard" ? "keyboard" : device.kindIcon === "headset" ? "headphones" : "devices"
   readonly property string reading: hasBattery ? FoamyI18n.t("%1%", level) : "—"
   readonly property string stateText: FoamyI18n.t(!online ? "Offline" : device.charging ? "Charging" : !hasBattery ? "Battery unavailable" : low ? "Low battery" : "Connected")
 
@@ -37,7 +37,7 @@ Rectangle {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     spacing: FoamyStyle.gapLarge
-    OpticalGlyph { text: root.icon; fontFamily: Style.font.family; fontSize: FoamyStyle.font.iconLarge; color: root.nameColor; width: Style.space(24); height: Style.space(24) }
+    FoamyIcon { name: root.icon; color: root.nameColor; Layout.preferredWidth: FoamyStyle.headerIconSize; Layout.preferredHeight: FoamyStyle.headerIconSize; Layout.alignment: Qt.AlignVCenter }
     ColumnLayout {
       Layout.fillWidth: true
       spacing: FoamyStyle.gapSmall
@@ -64,7 +64,7 @@ Rectangle {
     anchors.top: parent.top
     anchors.margins: FoamyStyle.sectionGap
     spacing: FoamyStyle.gap
-    OpticalGlyph { text: root.icon; fontFamily: Style.font.family; fontSize: FoamyStyle.font.iconLarge; color: root.nameColor; width: Style.space(24); height: Style.space(24) }
+    FoamyIcon { name: root.icon; color: root.nameColor; width: FoamyStyle.headerIconSize; height: FoamyStyle.headerIconSize }
     Text { width: parent.width; text: root.reading; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.readingColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.displayLarge }
     // Reserve two name lines so paired tiles keep readings and tracks aligned.
     FontMetrics { id: nameMetrics; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle }

@@ -64,10 +64,9 @@ ShellRoot {
     }
   }
 
-  // 4.5 emits textKey(text, modifiers); 4.0 textKey(text).
-  function key(view, text) {
-    try { view.textKey(text, 0) } catch (error) { view.textKey(text) }
-  }
+  // textKey is (text) on 4.0 and (text, modifiers) on 4.5: the kit emits the right one.
+  FoamyCursor { id: keys }
+  function key(view, text) { keys.emitTextKey(view, text, 0) }
   function findByName(item, name) {
     if (!item) return null
     if (item.objectName === name) return item
@@ -154,7 +153,8 @@ ShellRoot {
     eq(first.preferences.layout, "tiles", "saved value shows before the host reloads")
     first.save("refreshSeconds", 12)
     eq(mockBar.saved.length, 1, "invalid value not saved")
-    check(first.settingsError !== "", "invalid value reported")
+    check(first.prefs.error !== "", "invalid value reported")
+    check(view.settingsError !== "", "the settings page shows it")
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
     first.close()
@@ -166,6 +166,14 @@ ShellRoot {
     eq(service.refreshing, false, "refresh answered")
     eq(service.payload.receivers.length ? service.payload.receivers[0].productId : "", "N2", "open + r: two refresh commands reached the one helper")
     check(service.lastUpdatedAt > 0, "snapshot time kept")
+    // The settings IPC on a closed popup opens it on Settings (FoamySettingsState).
+    var first = panels.itemAt(0)
+    eq(first.opened, false, "popup closed")
+    first.openSettings()
+    eq(first.opened, true, "settings opens the popup")
+    eq(first.editingSettings, true, "and lands on Settings")
+    first.close()
+    eq(first.editingSettings, false, "Settings resets on close")
     service.helper.signal(15)
     after(700, stepFour)
   }

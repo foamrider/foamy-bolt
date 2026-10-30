@@ -125,8 +125,7 @@ PanelKeyCatcher {
     FoamyHeader {
       id: header
       width: parent.width
-      // kit has no Lucide "mouse" yet (kit issue filed); "devices" is the closest.
-      iconName: "devices"
+      iconName: "mouse"
       title: FoamyI18n.t("Logitech")
       meta: root.loading ? FoamyI18n.t("Reading devices…") : FoamyI18n.tn("%1 devices connected", root.onlineCount)
       settingsHasCursor: root.hasCursor("settings")

@@ -1,12 +1,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const vm = require('node:vm')
 const M = require('../Model.js'), Schema = require('../Preferences.js'), manifest = require('../manifest.json')
-// kit/FoamyPrefs.js is a QML JS library; load it in a sandbox without its pragma.
-const sandbox = { module: { exports: {} }, console: { log() {}, warn() {} } }
-vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../kit/FoamyPrefs.js'), 'utf8').replace(/^\.pragma library\s*$/m, ''), sandbox)
-const Prefs = sandbox.module.exports
+const Prefs = require('../kit/node-loader.cjs').load('FoamyPrefs')
 const I18n = require('./i18n.cjs')
 
 for (const v of [null, undefined, '0', NaN, Infinity, -1, 101, false]) assert.equal(M.battery(v), null)
