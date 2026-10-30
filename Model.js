@@ -49,6 +49,14 @@ function parseEvent(raw) {
   if (typeof detail!=="string") throw new Error("Invalid event detail")
   return {event:"health",error:event.error,detail:detail.replace(/[^\w .,:()-]/g,"").slice(0,200)}
 }
+var helperStoppedError="Device readings stopped. Retrying automatically."
+// What to show after the helper exits. An error snapshot it sent during this
+// run is more specific and stays; otherwise the last readings (or "Reading
+// devices…") would keep looking live while nothing produces snapshots.
+function payloadAfterExit(payload,errorSnapshotThisRun) {
+  if (errorSnapshotThisRun && payload && ["error","unavailable"].indexOf(payload.status)>=0) return payload
+  return {status:"error",receivers:payload && Array.isArray(payload.receivers) ? payload.receivers : [],devices:[],errors:[helperStoppedError]}
+}
 // Helper exit codes: 3 = Solaar missing or unsupported (a restart cannot help soon).
 var exitUnavailable=3
 // Restart delay after `failures` consecutive failed runs: 30 s doubling to 10 min;
@@ -57,4 +65,4 @@ function restartDelay(failures,exitCode) {
   var first=exitCode===exitUnavailable ? 300000 : 30000
   return Math.min(600000,first*Math.pow(2,Math.max(0,failures-1)))
 }
-if (typeof module !== "undefined") module.exports={minutesSince:minutesSince,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload}
+if (typeof module !== "undefined") module.exports={minutesSince:minutesSince,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}

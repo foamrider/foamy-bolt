@@ -34,6 +34,8 @@ QtObject {
   property int failures: 0
   property int lastExitCode: 0
   property int starts: 0
+  // This run sent an error snapshot (kept over the generic "stopped" error).
+  property bool errorSnapshotThisRun: false
   readonly property bool running: helper.running
   readonly property bool waiting: restartTimer.running
 
@@ -47,6 +49,7 @@ QtObject {
     if (!wanted || helper.running) return
     restartTimer.stop()
     helper.command = helperCommand
+    errorSnapshotThisRun = false
     helper.running = true
     starts++
     watchdog.restart()
@@ -85,6 +88,7 @@ QtObject {
     watchdog.restart()
     if (event.event === "status") {
       payload = event.payload
+      errorSnapshotThisRun = ["error", "unavailable"].indexOf(event.payload.status) >= 0
       refreshing = false
       // Use the snapshot time; failed reads never look freshly updated.
       if (["ok", "partial", "absent"].indexOf(event.payload.status) >= 0 && event.payload.updatedAt > 0) {
@@ -104,6 +108,9 @@ QtObject {
     if (!wanted) return
     failures++
     if (code !== Model.exitUnavailable) eventError = Model.eventError
+    // Nothing produces readings until the restart: show that instead of stale
+    // devices (or an endless "Reading devices…"), unless the helper said why.
+    payload = Model.payloadAfterExit(payload, errorSnapshotThisRun)
     restartTimer.interval = Model.restartDelay(failures, code)
     restartTimer.restart()
   }

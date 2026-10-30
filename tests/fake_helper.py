@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stand-in for logitech_events.py in runtime tests: speaks the same protocol
 with canned devices and never touches hardware. Each start appends a line to
-$FOAMY_BOLT_STARTS; the receiver's productId counts `refresh` commands and its
+$FOAMY_BOLT_STARTS; `fail` sends an error snapshot and exits 1; the receiver's productId counts `refresh` commands and its
 name says whether DISPLAY/WAYLAND_DISPLAY reached the helper."""
 import json
 import os
@@ -32,3 +32,8 @@ for line in sys.stdin:
     if line.strip() == "refresh":
         count += 1
         status(count)
+    elif line.strip() == "fail":  # test hook: an error snapshot, then a crash
+        error = {"status": "error", "updatedAt": int(time.time()), "receivers": [], "devices": [],
+                 "errors": ["Device query timed out. Try Refresh."]}
+        print(json.dumps({"event": "status", "payload": error}), flush=True)
+        sys.exit(1)

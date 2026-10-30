@@ -60,8 +60,8 @@ def run(host, lang):
     except ValueError:
         leader = False
     helpers = len(starts.read_text().split()) if starts.exists() else 0
-    if helpers != 3:
-        failures.append(f"FOAMY FAIL helper processes started: {helpers}, expected 3 (start, restart, re-add)")
+    if helpers != 4:
+        failures.append(f"FOAMY FAIL helper processes started: {helpers}, expected 4 (start, restart, restart after an error, re-add)")
     ok = "FOAMY DONE" in log and not failures and leader
     print(f"{'PASS' if ok else 'FAIL'} runtime {host} {lang}: {result}; ipc status from leader: {leader}")
     if not ok:

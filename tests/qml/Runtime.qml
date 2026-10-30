@@ -49,6 +49,21 @@ ShellRoot {
 
   MockBar { id: mockBar; moduleName: "foamy.bolt" }
 
+  FloatingWindow {
+    implicitWidth: 420
+    implicitHeight: 320
+    Bolt.BoltView {
+      id: tallView
+      width: 420
+      height: 320
+      readonly property var many: [0, 1, 2, 3, 4, 5, 6, 7].map(function(i) { return { name: "Device " + i, kindIcon: "mouse", online: true, battery: 50, charging: false } })
+      payload: ({ status: "ok", receivers: [{ name: "Bolt Receiver", productId: "C548" }], devices: many, errors: [] })
+      devices: many
+      onlineCount: 8
+      settings: ({ layout: "tiles" })
+    }
+  }
+
   // 4.5 emits textKey(text, modifiers); 4.0 textKey(text).
   function key(view, text) {
     try { view.textKey(text, 0) } catch (error) { view.textKey(text) }
@@ -161,6 +176,10 @@ ShellRoot {
     eq(service.failures, 1, "failure counted")
     eq(service.waiting, true, "restart waits out the backoff")
     eq(service.restartTimer.interval, 30000, "first backoff is 30 s")
+    eq(service.payload.status, "error", "a stopped helper shows as an error")
+    eq(service.payload.errors[0], "Device readings stopped. Retrying automatically.", "stopped-helper message")
+    eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
+    eq(panels.itemAt(0).degraded, true, "bar shows the degraded state")
     panels.itemAt(1).refresh(true)
     after(900, stepFive)
   }
@@ -170,8 +189,39 @@ ShellRoot {
     eq(service.starts, 2, "Refresh restarts a waiting helper now")
     eq(service.running, true, "helper running again")
     eq(service.failures, 0, "a good snapshot resets the backoff")
-    panels.model = 0
-    after(700, stepSix)
+    eq(service.payload.status, "ok", "readings back after the restart")
+    service.helper.write("fail\n")
+    after(700, stepFiveB)
+  }
+
+  function stepFiveB() {
+    var service = Bolt.BoltService
+    eq(service.running, false, "helper failed")
+    eq(service.payload.errors[0], "Device query timed out. Try Refresh.", "its own error snapshot is kept")
+    panels.itemAt(0).refresh(true)
+    after(900, function() {
+      eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
+      eq(Bolt.BoltService.payload.status, "ok", "readings back")
+      checkScroll()
+      panels.model = 0
+      after(700, stepSix)
+    })
+  }
+
+  // The device list scrolls when it is taller than the card, and the keyboard
+  // cursor keeps its stop in view.
+  function checkScroll() {
+    var list = shell.findByName(tallView, "listScroll")
+    check(list !== null, "list has a scroll container")
+    if (!list) return
+    check(list.contentHeight > list.height, "eight tiles overflow a 320 px card: " + list.contentHeight + " > " + list.height)
+    eq(list.interactive, true, "overflowing list can be scrolled")
+    eq(list.contentY, 0, "starts at the top")
+    for (var i = 0; i < 4; i++) tallView.moveRequested(0, 1)
+    eq(tallView.cursorKey, "refresh", "cursor reaches the footer")
+    check(list.contentY > 0, "footer scrolled into view")
+    tallView.moveRequested(0, -1); tallView.moveRequested(0, -1); tallView.moveRequested(0, -1)
+    eq(tallView.cursorKey, "settings", "back to the header")
   }
 
   function stepSix() {
@@ -181,7 +231,7 @@ ShellRoot {
     eq(service.waiting, false, "no restart pending")
     panels.model = 3
     after(1200, function() {
-      eq(Bolt.BoltService.starts, 3, "helper starts again with the bars")
+      eq(Bolt.BoltService.starts, 4, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
       finish()
     })

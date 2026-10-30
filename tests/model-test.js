@@ -67,7 +67,22 @@ console.log('ok — restart backoff: 30 s doubling to 10 min, 5 min first withou
 for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => f.endsWith('.qml'))) {
   const text = fs.readFileSync(path.join(__dirname, '..', file), 'utf8')
   assert.doesNotMatch(text, /OpticalGlyph\s*\{[^}]*text:\s*""/, `${file}: empty OpticalGlyph text`)
+  assert.doesNotMatch(text, /[\uE000-\uF8FF]|[\u{F0000}-\u{FFFFD}]/u, `${file}: literal private-use glyph; use an escape`)
 }
 const panel = fs.readFileSync(path.join(__dirname, '../Panel.qml'), 'utf8')
 assert.match(panel, /barGlyph: "\\uf0e7"/, 'bar glyph is the escaped Nerd Font bolt')
 console.log('ok — bar and device glyphs are present')
+
+// Regression: a helper that exits without an error snapshot must not leave
+// stale readings (or "Reading devices…") looking live during the backoff.
+const live = M.parsePayload(payload)
+const stopped = M.payloadAfterExit(live, false)
+assert.equal(stopped.status, 'error')
+assert.deepEqual(stopped.errors, [M.helperStoppedError])
+assert.deepEqual(stopped.devices, [])
+assert.equal(stopped.receivers[0].name, 'Bolt', 'receivers kept for context')
+assert.equal(M.payloadAfterExit(M.loadingPayload(), false).status, 'error', 'no endless loading state')
+const busy = M.errorPayload('Device query timed out. Try Refresh.')
+assert.equal(M.payloadAfterExit(busy, true), busy, 'a specific error snapshot from this run stays')
+assert.equal(M.payloadAfterExit(busy, false).errors[0], M.helperStoppedError, 'an error from an earlier run is replaced')
+console.log('ok — a stopped helper shows in the displayed state')

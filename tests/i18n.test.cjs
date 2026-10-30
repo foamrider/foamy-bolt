@@ -30,7 +30,9 @@ for (const field of Schema.fields) {
 }
 for (const file of ['logitech_status.py', 'logitech_events.py'])
   for (const match of fs.readFileSync(path.join(root, file), 'utf8').matchAll(/^[A-Z_]*ERROR = "([^"]+)"/gm)) literals.push([file, match[1]]);
+for (const match of fs.readFileSync(path.join(root, 'Model.js'), 'utf8').matchAll(/^var \w+Error="([^"]+)"/gm)) literals.push(['Model.js', match[1]]);
 assert.ok(literals.some(([file]) => file === 'logitech_status.py'), 'helper errors found');
+assert.ok(literals.some(([file]) => file === 'Model.js'), 'model errors found');
 for (const [file, key] of literals) assert.ok(Object.hasOwn(I.en, key), `${file}: missing catalog entry ${key}`);
 
 // Counts go through tn() with a plural entry; no glued "n + text" plurals.
