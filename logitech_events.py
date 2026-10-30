@@ -378,9 +378,13 @@ class Helper:
                     health_at = now + HEALTH_EVERY
                 # Sleep until the next deadline instead of polling.
                 deadlines = [scan_at, health_at]
-                if pending is not None:
+                busy = self.worker.busy
+                # A pending change can only be read once the worker is free;
+                # its completion wakes this loop. An expired debounce deadline
+                # while busy would make select() return at once and spin.
+                if pending is not None and not busy:
                     deadlines.append(pending + DEBOUNCE)
-                if self.worker.busy or any(w.busy_since for w in self.listeners.values()):
+                if busy or any(w.busy_since for w in self.listeners.values()):
                     deadlines.append(now + 5.0)
                 timeout = max(0.0, min(deadlines) - self.clock())
                 watch = [self.wakeup.read_fd] + ([monitor.fileno()] if monitor is not None else [])

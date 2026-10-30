@@ -9,6 +9,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
+import unittest.mock
 from unittest.mock import Mock
 
 
@@ -213,6 +214,40 @@ class HelperTest(unittest.TestCase):
         time.sleep(0.3)
         self.assertEqual(len(calls), 2)
         helper.stop(); thread.join(5)
+
+    def test_pending_change_during_a_slow_query_does_not_spin(self):
+        # Regression: an expired debounce deadline kept select() at timeout 0
+        # while the worker was busy, spinning a core until the query ended.
+        emitter = FakeEmitter()
+        gate = threading.Event()
+        calls = []
+        def receivers():
+            calls.append(1)
+            if len(calls) == 2:
+                gate.wait(5)
+            return []
+        api = poll_only_api()
+        api.base.receivers = receivers
+        helper = EVENTS.Helper(api, emitter)
+        selects = []
+        real_select = EVENTS.select.select
+        def counting_select(*args):
+            selects.append(args[3])
+            return real_select(*args)
+        with unittest.mock.patch.object(EVENTS.select, "select", counting_select):
+            thread = self.start(helper)
+            self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
+            helper.request()            # second read blocks in the worker
+            time.sleep(0.2)
+            helper.mark_changed()       # change arrives while it is busy
+            before = len(selects)
+            time.sleep(EVENTS.DEBOUNCE + 0.6)
+            spins = len(selects) - before
+            gate.set()
+            self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 3))
+            helper.stop(); thread.join(5)
+        self.assertLess(spins, 10, f"{spins} select() calls while the worker was busy")
+        self.assertEqual(len(calls), 3, "the pending change is read after the slow query")
 
     def test_borrowed_receivers_are_only_ready_live_listeners(self):
         helper = EVENTS.Helper(poll_only_api(), FakeEmitter())
