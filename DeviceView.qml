@@ -19,7 +19,8 @@ Rectangle {
   readonly property color nameColor: online ? FoamyPalette.text : FoamyPalette.secondaryText
   readonly property color readingColor: low ? Commons.Color.urgent : nameColor
   readonly property color levelColor: low ? Commons.Color.urgent : Commons.Color.accent
-  readonly property string icon: device.kindIcon === "mouse" ? "󰍽" : device.kindIcon === "keyboard" ? "󰌌" : device.kindIcon === "headset" ? "󰋋" : "󰂯"
+  // Nerd Font glyphs, escaped so editors and tools can't strip them.
+  readonly property string icon: device.kindIcon === "mouse" ? "\u{f037d}" : device.kindIcon === "keyboard" ? "\u{f030c}" : device.kindIcon === "headset" ? "\u{f02cb}" : "\u{f00af}"
   readonly property string reading: hasBattery ? FoamyI18n.t("%1%", level) : "—"
   readonly property string stateText: FoamyI18n.t(!online ? "Offline" : device.charging ? "Charging" : !hasBattery ? "Battery unavailable" : low ? "Low battery" : "Connected")
 
