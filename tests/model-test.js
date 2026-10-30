@@ -61,3 +61,13 @@ assert.equal(M.restartDelay(1, M.exitUnavailable), 300000)
 assert.equal(M.restartDelay(2, M.exitUnavailable), 600000)
 assert.equal(M.restartDelay(30, M.exitUnavailable), 600000)
 console.log('ok — restart backoff: 30 s doubling to 10 min, 5 min first without Solaar')
+
+// Regression: the bar glyph was lost (a private-use character dropped in an
+// edit), leaving a blank bar slot. Glyphs must be non-empty, escaped codepoints.
+for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => f.endsWith('.qml'))) {
+  const text = fs.readFileSync(path.join(__dirname, '..', file), 'utf8')
+  assert.doesNotMatch(text, /OpticalGlyph\s*\{[^}]*text:\s*""/, `${file}: empty OpticalGlyph text`)
+}
+const panel = fs.readFileSync(path.join(__dirname, '../Panel.qml'), 'utf8')
+assert.match(panel, /barGlyph: "\\uf0e7"/, 'bar glyph is the escaped Nerd Font bolt')
+console.log('ok — bar and device glyphs are present')

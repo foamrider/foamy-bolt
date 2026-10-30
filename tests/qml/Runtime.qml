@@ -53,6 +53,15 @@ ShellRoot {
   function key(view, text) {
     try { view.textKey(text, 0) } catch (error) { view.textKey(text) }
   }
+  function findByName(item, name) {
+    if (!item) return null
+    if (item.objectName === name) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findByName(item.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
   function leaders() {
     var count = 0
     for (var i = 0; i < panels.count; i++) if (panels.itemAt(i).statusObject().leader) count++
@@ -86,6 +95,8 @@ ShellRoot {
     eq(first.onlineDevices.length, 2, "online filter")
     eq(first.lowestBattery, 12, "lowest battery")
     eq(first.showPercentage, true, "low battery shows in the bar")
+    var glyph = shell.findByName(first, "barGlyph")
+    check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
     eq(first.popup.bodyItem, null, "popup body is lazy")
     first.open()
     after(700, stepTwo)

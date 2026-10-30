@@ -22,6 +22,8 @@ Panel {
   readonly property alias member: member
   readonly property bool vertical: bar && (bar.position === "left" || bar.position === "right")
   readonly property color foreground: bar ? bar.barForeground : Commons.Color.foreground
+  // Nerd Font bolt (U+F0E7), escaped so editors and terminals can't drop the private-use glyph.
+  readonly property string barGlyph: "\uf0e7"
 
   // Saved values show right away, before the host hands back new settings.
   property var pendingSettings: ({})
@@ -185,7 +187,7 @@ Panel {
       id: barContent
       anchors.centerIn: parent
       spacing: Style.space(4)
-      OpticalGlyph { width: Style.bar.iconCanvas; height: Style.bar.iconCanvas; text: ""; fontFamily: button.fontFamily; fontSize: button.fontSize; color: root.lowBattery || root.degraded ? Commons.Color.urgent : root.foreground }
+      OpticalGlyph { objectName: "barGlyph"; width: Style.bar.iconCanvas; height: Style.bar.iconCanvas; text: root.barGlyph; fontFamily: button.fontFamily; fontSize: button.fontSize; color: root.lowBattery || root.degraded ? Commons.Color.urgent : root.foreground }
       Text { visible: root.showPercentage && !root.vertical; anchors.verticalCenter: parent.verticalCenter; text: FoamyI18n.t("%1%", root.lowestBattery); color: root.lowBattery ? Commons.Color.urgent : root.foreground; font.family: button.fontFamily; font.pixelSize: button.fontSize }
     }
     onPressed: function(b) { if (b === Qt.RightButton) root.openSolaar(); else root.toggle() }
