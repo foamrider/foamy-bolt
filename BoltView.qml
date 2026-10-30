@@ -113,7 +113,7 @@ PanelKeyCatcher {
     else if (text === "o") root.solaarRequested()
   }
 
-  // Header stays put; devices, receiver details and the footer scroll when
+  // The band stays put; devices, receiver details and the footer scroll when
   // they exceed the card (FoamyPopup caps it at popupMaxHeight / the screen).
   Item {
     id: list
@@ -122,7 +122,8 @@ PanelKeyCatcher {
     height: parent.height
     implicitHeight: header.implicitHeight + listBody.implicitHeight
 
-    FoamyHeader {
+    // Title-only band (list panel: every device row is equal, no hero content).
+    FoamyHeroBand {
       id: header
       width: parent.width
       iconName: "mouse"
@@ -152,6 +153,7 @@ PanelKeyCatcher {
       Column {
         id: listBody
         width: parent.width
+        topPadding: FoamyStyle.sectionGap
         leftPadding: FoamyStyle.padding
         rightPadding: FoamyStyle.padding
         bottomPadding: FoamyStyle.padding
