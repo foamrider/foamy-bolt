@@ -321,6 +321,7 @@ PanelKeyCatcher {
         id: thresholdInput
         objectName: "thresholdInput"
         width: parent.width
+        compact: true
         enabled: !root.saving
         label: FoamyI18n.t("Low battery below")
         unit: "%"
