@@ -1,0 +1,303 @@
+import QtQuick
+import Quickshell
+import qs.Commons
+import qs.Ui
+import "harness"
+import "plugin" as Bolt
+import "plugin/kit"
+
+// Foamy Bolt under a real host shell, offscreen: three bar instances (as on
+// three monitors) share ONE helper (a fake that speaks the helper protocol),
+// one leader owns IPC, the popup body is lazy, the single keyboard cursor,
+// settings saving through the bar, backoff and restart, teardown when the
+// last instance goes, translations, plurals and RTL mirroring.
+ShellRoot {
+  id: shell
+  readonly property string host: Quickshell.env("FOAMY_HOST")
+  readonly property string lang: Quickshell.env("FOAMY_LANG") || "en"
+  property int checks: 0
+  property int failures: 0
+
+  function check(ok, label) {
+    checks++
+    if (!ok) { failures++; console.log("FOAMY FAIL " + host + "/" + lang + " " + label) }
+  }
+  function eq(actual, expected, label) {
+    check(actual === expected, label + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
+  }
+
+  FloatingWindow {
+    implicitWidth: 1920
+    implicitHeight: 1080
+    color: "black"
+    ScreenSim { id: sim }
+    Row {
+      y: 4
+      x: 1200
+      spacing: 40
+      Repeater {
+        id: panels
+        model: 0
+        Bolt.Panel {
+          bar: mockBar
+          moduleName: "foamy.bolt"
+          settings: ({ id: "foamy.bolt", layout: "list", extra: "kept" })
+        }
+      }
+    }
+  }
+
+  MockBar { id: mockBar; moduleName: "foamy.bolt" }
+
+  FloatingWindow {
+    implicitWidth: 420
+    implicitHeight: 320
+    Bolt.BoltView {
+      id: tallView
+      width: 420
+      height: 320
+      readonly property var many: [0, 1, 2, 3, 4, 5, 6, 7].map(function(i) { return { name: "Device " + i, kindIcon: "mouse", online: true, battery: 50, charging: false } })
+      payload: ({ status: "ok", receivers: [{ name: "Bolt Receiver", productId: "C548" }], devices: many, errors: [] })
+      devices: many
+      onlineCount: 8
+      settings: ({ layout: "tiles" })
+    }
+  }
+
+  // textKey is (text) on 4.0 and (text, modifiers) on 4.5: the kit emits the right one.
+  FoamyCursor { id: keys }
+  function key(view, text) { keys.emitTextKey(view, text, 0) }
+  function findByName(item, name) {
+    if (!item) return null
+    if (item.objectName === name) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findByName(item.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
+  function leaders() {
+    var count = 0
+    for (var i = 0; i < panels.count; i++) if (panels.itemAt(i).statusObject().leader) count++
+    return count
+  }
+  function after(ms, fn) {
+    var timer = Qt.createQmlObject('import QtQuick; Timer { }', shell)
+    timer.interval = ms
+    timer.triggered.connect(function() { timer.destroy(); fn() })
+    timer.start()
+  }
+
+  Component.onCompleted: {
+    eq(Bolt.BoltService.running, false, "no helper before any bar instance")
+    Bolt.BoltService.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
+    panels.model = 3
+    after(1500, stepOne)
+  }
+
+  function stepOne() {
+    var service = Bolt.BoltService
+    eq(leaders(), 1, "one leader across three bar instances")
+    eq(service.members, 3, "three members")
+    eq(service.starts, 1, "one helper for three bar instances")
+    eq(service.running, true, "helper running")
+    eq(service.payload.status, "ok", "snapshot from the helper")
+    eq(service.payload.devices.length, 3, "three devices")
+    eq(service.payload.receivers.length ? service.payload.receivers[0].name : "", "display:none", "helper runs without a display")
+    eq(service.refreshSeconds, 300, "leader pushes the fallback interval")
+    var first = panels.itemAt(0)
+    eq(first.onlineDevices.length, 2, "online filter")
+    eq(first.lowestBattery, 12, "lowest battery")
+    eq(first.showPercentage, true, "low battery shows in the bar")
+    var glyph = shell.findByName(first, "barGlyph")
+    check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
+    eq(first.popup.bodyItem, null, "popup body is lazy")
+    first.open()
+    after(700, stepTwo)
+  }
+
+  function stepTwo() {
+    var first = panels.itemAt(0)
+    var view = first.popup.bodyItem
+    check(view !== null, "body built on open")
+    if (!view) { finish(); return }
+    eq(view.devices.length, 2, "offline devices hidden by default")
+    eq(view.cursorKey, "", "no cursor highlight on open")
+    view.moveRequested(0, 1)
+    eq(view.cursorKey, "settings", "first move lands on Settings")
+    view.moveRequested(0, 1)
+    eq(view.cursorKey, "details", "then Receiver details")
+    view.activateRequested()
+    eq(first.receiverDetails, true, "Enter unfolds Receiver details")
+    view.moveRequested(1, 0)
+    eq(view.cursorKey, "solaar", "l moves on to Solaar")
+    view.moveRequested(0, 1)
+    eq(view.cursorKey, "refresh", "then Refresh")
+    shell.key(view, "r")
+    eq(Bolt.BoltService.refreshing, true, "r asks the helper for a snapshot")
+    eq(view.LayoutMirroring.enabled, shell.lang === "ar", "popup body mirrors in RTL only")
+    var plural = { en: "1 device connected", no: "1 enhet tilkoblet", ar: "1 device connected" }
+    if (shell.lang !== "ar") eq(FoamyI18n.tn("%1 devices connected", 1), plural[shell.lang], "plural one")
+    var many = { en: "2 devices connected", no: "2 enheter tilkoblet" }
+    if (shell.lang !== "ar") eq(FoamyI18n.tn("%1 devices connected", 2), many[shell.lang], "plural other")
+    shell.key(view, "s")
+    eq(first.editingSettings, true, "s opens Settings")
+    eq(view.blocked, true, "settings page owns the keys")
+    first.save("layout", "tiles")
+    eq(mockBar.saved.length, 1, "setting saved inline")
+    if (mockBar.saved.length === 1) {
+      eq(mockBar.saved[0].id, "foamy.bolt", "saved to the widget's own entry")
+      eq(mockBar.saved[0].settings.layout, "tiles", "saved value")
+      eq(mockBar.saved[0].settings.extra, "kept", "unknown keys kept")
+    }
+    eq(first.preferences.layout, "tiles", "saved value shows before the host reloads")
+    first.save("refreshSeconds", 12)
+    eq(mockBar.saved.length, 1, "invalid value not saved")
+    check(first.prefs.error !== "", "invalid value reported")
+    check(view.settingsError !== "", "the settings page shows it")
+    shell.thresholdChecks(first, view)
+    first.closeSettings()
+    eq(view.blocked, false, "back from Settings")
+    first.close()
+    after(800, stepThree)
+  }
+
+  function stepThree() {
+    var service = Bolt.BoltService
+    eq(service.refreshing, false, "refresh answered")
+    eq(service.payload.receivers.length ? service.payload.receivers[0].productId : "", "N2", "open + r: two refresh commands reached the one helper")
+    check(service.lastUpdatedAt > 0, "snapshot time kept")
+    // The settings IPC on a closed popup opens it on Settings (FoamySettingsState).
+    var first = panels.itemAt(0)
+    eq(first.opened, false, "popup closed")
+    first.openSettings()
+    eq(first.opened, true, "settings opens the popup")
+    eq(first.editingSettings, true, "and lands on Settings")
+    first.close()
+    eq(first.editingSettings, false, "Settings resets on close")
+    service.helper.signal(15)
+    after(700, stepFour)
+  }
+
+  function stepFour() {
+    var service = Bolt.BoltService
+    eq(service.running, false, "helper ended")
+    eq(service.failures, 1, "failure counted")
+    eq(service.waiting, true, "restart waits out the backoff")
+    eq(service.restartTimer.interval, 30000, "first backoff is 30 s")
+    eq(service.payload.status, "error", "a stopped helper shows as an error")
+    eq(service.payload.errors[0], "Device readings stopped. Retrying automatically.", "stopped-helper message")
+    eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
+    eq(panels.itemAt(0).degraded, true, "bar shows the degraded state")
+    panels.itemAt(1).refresh(true)
+    after(900, stepFive)
+  }
+
+  function stepFive() {
+    var service = Bolt.BoltService
+    eq(service.starts, 2, "Refresh restarts a waiting helper now")
+    eq(service.running, true, "helper running again")
+    eq(service.failures, 0, "a good snapshot resets the backoff")
+    eq(service.payload.status, "ok", "readings back after the restart")
+    service.helper.write("fail\n")
+    after(700, stepFiveB)
+  }
+
+  function stepFiveB() {
+    var service = Bolt.BoltService
+    eq(service.running, false, "helper failed")
+    eq(service.payload.errors[0], "Device query timed out. Try Refresh.", "its own error snapshot is kept")
+    panels.itemAt(0).refresh(true)
+    after(900, function() {
+      eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
+      eq(Bolt.BoltService.payload.status, "ok", "readings back")
+      checkScroll()
+      panels.model = 0
+      after(700, stepSix)
+    })
+  }
+
+  // The device list scrolls when it is taller than the card, and the keyboard
+  // cursor keeps its stop in view.
+  // The low-battery field (kit FoamyNumberField) never assigns over its bound
+  // value: external changes show while Settings is open, focusing through
+  // without typing saves nothing, Escape restores and stays on Settings, and a
+  // valid changed number is saved once.
+  function thresholdChecks(first, view) {
+    var field = shell.findByName(view, "thresholdInput")
+    check(field !== null && field.field !== undefined, "threshold is a FoamyNumberField")
+    if (!field) return
+    eq(field.field.text, "30", "shows the saved threshold")
+    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 20 })
+    eq(field.field.text, "20", "an external change shows while Settings is open")
+    var saves = mockBar.saved.length
+    field.field.focusInput()
+    field.field.editingFinished()
+    view.forceActiveFocus()
+    field.field.editingFinished()
+    eq(mockBar.saved.length, saves, "tabbing through the unchanged field saves nothing")
+    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 25 })
+    eq(field.field.text, "25", "a second external change still shows (binding intact)")
+    field.field.text = "45"
+    field.field.textEdited()
+    // The editor's key path (keyPressed → handleKey); the handler marks the key
+    // accepted when handleKey returns true, so FoamySettingsPage never sees it.
+    field.field.keyPressed({ key: Qt.Key_Escape, accepted: false })
+    eq(field.handleKey(Qt.Key_Escape), true, "Escape is consumed by the field")
+    eq(field.field.text, "25", "Escape restores the saved value")
+    eq(first.editingSettings, true, "and stays on Settings")
+    eq(mockBar.saved.length, saves, "Escape saves nothing")
+    field.field.text = "15"
+    field.field.textEdited()
+    field.field.accepted()
+    eq(mockBar.saved.length, saves + 1, "a changed number is saved once")
+    if (mockBar.saved.length === saves + 1) eq(mockBar.saved[saves].settings.lowBatteryThreshold, 15, "saved threshold")
+    field.field.editingFinished()
+    eq(mockBar.saved.length, saves + 1, "not saved twice")
+    field.field.text = "150"
+    field.field.textEdited()
+    field.field.accepted()
+    eq(mockBar.saved.length, saves + 1, "out-of-range number not saved")
+    check(field.error !== "", "out-of-range number explained")
+    field.handleKey(Qt.Key_Escape)
+  }
+
+  function checkScroll() {
+    var list = shell.findByName(tallView, "listScroll")
+    check(list !== null, "list has a scroll container")
+    if (!list) return
+    check(list.contentHeight > list.height, "eight tiles overflow a 320 px card: " + list.contentHeight + " > " + list.height)
+    eq(list.interactive, true, "overflowing list can be scrolled")
+    eq(list.contentY, 0, "starts at the top")
+    for (var i = 0; i < 4; i++) tallView.moveRequested(0, 1)
+    eq(tallView.cursorKey, "refresh", "cursor reaches the footer")
+    check(list.contentY > 0, "footer scrolled into view")
+    tallView.moveRequested(0, -1); tallView.moveRequested(0, -1); tallView.moveRequested(0, -1)
+    eq(tallView.cursorKey, "settings", "back to the header")
+  }
+
+  function stepSix() {
+    var service = Bolt.BoltService
+    eq(service.members, 0, "no members after the last bar goes")
+    eq(service.running, false, "helper stops with the last bar instance")
+    eq(service.waiting, false, "no restart pending")
+    panels.model = 3
+    after(1200, function() {
+      eq(Bolt.BoltService.starts, 4, "helper starts again with the bars")
+      eq(leaders(), 1, "one leader again")
+      finish()
+    })
+  }
+
+  property int holdMs: Number(Quickshell.env("FOAMY_HOLD_MS") || 0)
+  function finish() {
+    console.log("FOAMY RESULT " + host + "/" + lang + " " + checks + " checks, " + failures + " failures")
+    console.log("FOAMY READY")
+    finishTimer.start()
+  }
+  Timer {
+    id: finishTimer
+    interval: shell.holdMs
+    onTriggered: { console.log("FOAMY DONE"); Qt.quit() }
+  }
+}

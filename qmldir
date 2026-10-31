@@ -1,9 +1,4 @@
-singleton FoamyI18n 1.0 FoamyI18n.qml
-BoltAction 1.0 BoltAction.qml
-BoltDropdown 1.0 BoltDropdown.qml
-BoltIcon 1.0 BoltIcon.qml
-BoltPopup 1.0 BoltPopup.qml
+singleton BoltService 1.0 BoltService.qml
+BoltView 1.0 BoltView.qml
 DeviceView 1.0 DeviceView.qml
 Panel 1.0 Panel.qml
-SafeTextField 1.0 SafeTextField.qml
-SettingsPane 1.0 SettingsPane.qml
