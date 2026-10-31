@@ -69,6 +69,8 @@ languages mirror the popup). Omarchy 4.0 shows it in English.
 
 ## Development
 
+`kit/` holds shared components copied from [foamy-kit](https://github.com/foamrider/foamy-kit); edit them there, not here.
+
 Shared components come from [foamy-kit](https://github.com/foamrider/foamy-kit)
 and live in `kit/` as stamped copies: change them in foamy-kit and run its
 `sync.sh`, never edit them here.
