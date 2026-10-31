@@ -302,6 +302,7 @@ PanelKeyCatcher {
       title: FoamyI18n.t("Devices")
       FoamyDropdown {
         width: parent.width
+        compact: true
         label: FoamyI18n.t("Layout")
         value: root.setting("layout")
         enabled: !root.saving
@@ -338,6 +339,7 @@ PanelKeyCatcher {
       title: FoamyI18n.t("Bar")
       FoamyDropdown {
         width: parent.width
+        compact: true
         label: FoamyI18n.t("Show battery in the bar")
         value: root.setting("barPercentage")
         enabled: !root.saving
@@ -359,6 +361,7 @@ PanelKeyCatcher {
       description: FoamyI18n.t("Device events update readings right away. This is the fallback.")
       FoamyDropdown {
         width: parent.width
+        compact: true
         label: FoamyI18n.t("Refresh every")
         value: String(root.setting("refreshSeconds"))
         enabled: !root.saving
