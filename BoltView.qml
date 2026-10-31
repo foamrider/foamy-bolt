@@ -44,6 +44,8 @@ PanelKeyCatcher {
   signal switchPanelRequested(int direction)
 
   readonly property bool loading: payload.status === "loading"
+  // The list's wheel scrolling (tests).
+  readonly property QtObject listWheel: wheel
   readonly property bool degraded: ["error", "partial", "unavailable"].indexOf(payload.status) >= 0
   readonly property string layout: setting("layout")
   readonly property var stops: ["settings"].concat(payload.receivers.length ? ["details"] : []).concat(["solaar", "refresh"])
@@ -81,6 +83,8 @@ PanelKeyCatcher {
       listScroll.contentY = Math.max(0, Math.min(listScroll.contentHeight - listScroll.height, y + item.height - listScroll.height + margin))
   }
   onCursorKeyChanged: keepVisible(stopItem(cursorKey))
+  // Opening the receiver details scrolls them into view as they grow.
+  onReceiverDetailsChanged: if (receiverDetails) Qt.callLater(function() { wheel.ensureVisible(detailsColumn) })
   function focusSettings() { settingsPage.resetScroll(); settingsPage.focusBack() }
   function refreshOptions() {
     var current = Number(setting("refreshSeconds"))
@@ -96,7 +100,7 @@ PanelKeyCatcher {
   implicitHeight: editingSettings ? settingsPage.implicitHeight : list.implicitHeight
   blocked: editingSettings
   onEditingSettingsChanged: cursor.reset()
-  onShownChanged: if (!shown) { cursor.reset(); listScroll.contentY = 0 }
+  onShownChanged: if (!shown) { cursor.reset(); wheel.scrollTo(0, false) }
 
   FoamyCursor { id: cursor; count: root.stops.length }
   // Ticks once a minute, and only while the popup is shown.
@@ -113,7 +117,7 @@ PanelKeyCatcher {
   }
 
   // The band stays put; devices, receiver details and the footer scroll when
-  // they exceed the card (FoamyPopup caps it at popupMaxHeight / the screen).
+  // they exceed the card (FoamyPopup grows to the screen's available height).
   Item {
     id: list
     visible: !root.editingSettings
@@ -148,6 +152,9 @@ PanelKeyCatcher {
       onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
       onHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
       Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
+
+      // A wheel notch scrolls about three rows, however the mouse splits it.
+      FoamyWheelScroll { id: wheel; target: listScroll }
 
       Column {
         id: listBody
@@ -193,6 +200,7 @@ PanelKeyCatcher {
         }
 
         Column {
+          id: detailsColumn
           visible: root.payload.receivers.length > 0
           width: parent.inner
           spacing: FoamyStyle.gapSmall

@@ -274,6 +274,16 @@ ShellRoot {
     check(list.contentY > 0, "footer scrolled into view")
     tallView.moveRequested(0, -1); tallView.moveRequested(0, -1); tallView.moveRequested(0, -1)
     eq(tallView.cursorKey, "settings", "back to the header")
+    // A mouse-wheel notch scrolls about three rows (FoamyWheelScroll), even
+    // when a high-resolution wheel splits it into 8 x 15.
+    var wheel = tallView.listWheel
+    check(!!wheel && wheel.target === list, "the list scrolls with the kit wheel handling")
+    if (!wheel) return
+    wheel.scrollTo(0, false)
+    for (var n = 0; n < 8; n++) wheel.wheel({ angleDelta: Qt.point(0, -15), pixelDelta: Qt.point(0, 0) })
+    var to = isNaN(wheel.destination) ? list.contentY : wheel.destination
+    check(Math.abs(to - Math.min(wheel.notch, wheel.maxY)) < 1, "one wheel notch scrolls about three rows: " + to)
+    wheel.scrollTo(0, false)
   }
 
   function stepSix() {
