@@ -50,11 +50,7 @@ PanelKeyCatcher {
   readonly property string layout: setting("layout")
   readonly property var stops: ["settings"].concat(payload.receivers.length ? ["details"] : []).concat(["solaar", "refresh"])
   readonly property string cursorKey: cursor.index >= 0 && cursor.index < stops.length ? stops[cursor.index] : ""
-  readonly property string updatedText: {
-    var minutes = Model.minutesSince(lastUpdatedAt, clock.date.getTime())
-    if (minutes === null) return ""
-    return minutes === 0 ? FoamyI18n.t("Updated just now") : FoamyI18n.tn("Updated %1 minutes ago", minutes)
-  }
+  readonly property string updatedText: FoamyI18n.updatedAgo(lastUpdatedAt * 1000, clock.date.getTime())
   readonly property string emptyText: FoamyI18n.t(!payload.receivers.length ? "No receiver connected" : payload.devices.length ? "No devices online" : "No paired devices found")
 
   function setting(key) {

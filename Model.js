@@ -12,10 +12,6 @@ function lowestBattery(devices) {
   }
   return lowest
 }
-function minutesSince(updatedAt,nowMs) {
-  if (typeof updatedAt!=="number" || !isFinite(updatedAt) || updatedAt<=0) return null
-  return Math.max(0,Math.floor((nowMs-updatedAt*1000)/60000))
-}
 function loadingPayload() { return {status:"loading",receivers:[],devices:[],errors:[]} }
 function errorPayload(message) { return {status:"error",receivers:[],devices:[],errors:[message]} }
 // Accepts the helper's payload object (or its JSON text) and returns a bounded copy.
@@ -65,4 +61,4 @@ function restartDelay(failures,exitCode) {
   var first=exitCode===exitUnavailable ? 300000 : 30000
   return Math.min(600000,first*Math.pow(2,Math.max(0,failures-1)))
 }
-if (typeof module !== "undefined") module.exports={minutesSince:minutesSince,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}
+if (typeof module !== "undefined") module.exports={battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}

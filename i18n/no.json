@@ -10,6 +10,14 @@
     "one": "Oppdatert for %1 minutt siden",
     "other": "Oppdatert for %1 minutter siden"
   },
+  "Updated %1 hours ago": {
+    "one": "Oppdatert for %1 time siden",
+    "other": "Oppdatert for %1 timer siden"
+  },
+  "Updated %1 days ago": {
+    "one": "Oppdatert for %1 dag siden",
+    "other": "Oppdatert for %1 dager siden"
+  },
   "No receiver connected": "Ingen mottaker tilkoblet",
   "No devices online": "Ingen enheter tilkoblet",
   "No paired devices found": "Fant ingen parede enheter",

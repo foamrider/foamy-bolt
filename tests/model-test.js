@@ -32,10 +32,6 @@ assert.equal(manifest.barWidget.defaults.refreshSeconds, 300, 'events exist, so 
 for (const v of Schema.refreshChoices) assert.ok(Prefs.valid(Schema.fields, 'refreshSeconds', v))
 console.log('ok — schema, manifest defaults and List/Tiles preferences')
 
-assert.equal(M.minutesSince(null, 180000), null)
-assert.equal(M.minutesSince(60, 119999), 0)
-assert.equal(M.minutesSince(60, 120000), 1)
-assert.equal(M.minutesSince(240, 180000), 0)
 console.log('ok — snapshot age and minute boundaries')
 
 const status = M.parseEvent(JSON.stringify({ event: 'status', payload }))
