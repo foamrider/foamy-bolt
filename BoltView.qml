@@ -100,7 +100,7 @@ PanelKeyCatcher {
 
   FoamyCursor { id: cursor; count: root.stops.length }
   // Ticks once a minute, and only while the popup is shown.
-  SystemClock { id: clock; enabled: root.shown; precision: SystemClock.Minutes }
+  FoamyWallClock { id: clock; enabled: root.shown }
 
   onMoveRequested: function(dx, dy) { cursor.move(dy !== 0 ? dy : dx) }
   onActivateRequested: root.activate(root.cursorKey)
