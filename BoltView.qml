@@ -158,7 +158,8 @@ PanelKeyCatcher {
         topPadding: FoamyStyle.sectionGap
         leftPadding: FoamyStyle.padding
         rightPadding: FoamyStyle.padding
-        bottomPadding: FoamyStyle.padding
+        // The footer row is last: as far above the bottom as under its hairline.
+        bottomPadding: spacing
         spacing: FoamyStyle.sectionGap
         readonly property real inner: width - FoamyStyle.padding * 2
 
