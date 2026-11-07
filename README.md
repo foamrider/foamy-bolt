@@ -6,7 +6,7 @@ Logitech receiver and battery status for the Omarchy bar.
 
 ## Install
 
-Requires Omarchy 4.5 (it also loads on 4.0), Python 3 and Solaar (`solaar`),
+Requires Omarchy 4.5, Python 3 and Solaar (`solaar`),
 with Solaar able to access your receivers (its udev rules).
 
 ```sh
@@ -67,7 +67,7 @@ It accepts at most 16 KiB of plain text and stops clipboard reads after two seco
 
 The plugin follows **Omarchy → Setup → Language** on Omarchy 4.5 (English and
 Norwegian catalogs; other languages fall back to English, and right-to-left
-languages mirror the popup). Omarchy 4.0 shows it in English.
+languages mirror the popup).
 
 ## Development
 
