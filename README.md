@@ -6,7 +6,7 @@ Logitech receiver and battery status for the Omarchy bar.
 
 ## Install
 
-Requires Omarchy 4.5 (it also loads on 4.0), Python 3 and Solaar (`solaar`),
+Requires Omarchy 4.5, Python 3 and Solaar (`solaar`),
 with Solaar able to access your receivers (its udev rules).
 
 ```sh
@@ -21,6 +21,8 @@ omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
 - Keyboard: arrows or hjkl move, Enter activates, `s` Settings, `r` Refresh,
   `o` Solaar, Esc closes (or leaves Settings), Tab/Shift-Tab switch to the
   neighbouring bar panel.
+- IPC: `omarchy-shell foamy.bolt open|close|toggle|settings|refresh|status`
+  (`status` prints JSON).
 - Settings (the cog): layout (**List** or **Tiles**), show offline devices,
   low-battery threshold, **Show battery in the bar**, hide the widget without a
   receiver, and **Refresh every** (default 5 minutes).
@@ -65,11 +67,9 @@ It accepts at most 16 KiB of plain text and stops clipboard reads after two seco
 
 The plugin follows **Omarchy → Setup → Language** on Omarchy 4.5 (English and
 Norwegian catalogs; other languages fall back to English, and right-to-left
-languages mirror the popup). Omarchy 4.0 shows it in English.
+languages mirror the popup).
 
 ## Development
-
-`kit/` holds shared components copied from [foamy-kit](https://github.com/foamrider/foamy-kit); edit them there, not here.
 
 Shared components come from [foamy-kit](https://github.com/foamrider/foamy-kit)
 and live in `kit/` as stamped copies: change them in foamy-kit and run its
@@ -80,7 +80,7 @@ node tests/model-test.js && node tests/i18n.test.cjs
 python3 -I tests/test_logitech_events.py && python3 -I tests/test_logitech_status.py
 python3 -I tests/test_solaar_compat.py        # against the installed Solaar, no hardware access
 python3 -I tests/test_clipboard.py
-python3 -I tests/runtime.py                   # offscreen on 4.0 and 4.5 (needs foamy-kit's harness)
+python3 -I tests/runtime.py                   # offscreen on the installed 4.5 shell, 4.0 only with FOAMY_HOST_40 (needs foamy-kit's harness)
 bash tests/kit-check.sh
 ```
 
