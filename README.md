@@ -21,6 +21,8 @@ omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
 - Keyboard: arrows or hjkl move, Enter activates, `s` Settings, `r` Refresh,
   `o` Solaar, Esc closes (or leaves Settings), Tab/Shift-Tab switch to the
   neighbouring bar panel.
+- IPC: `omarchy-shell foamy.bolt open|close|toggle|settings|refresh|status`
+  (`status` prints JSON).
 - Settings (the cog): layout (**List** or **Tiles**), show offline devices,
   low-battery threshold, **Show battery in the bar**, hide the widget without a
   receiver, and **Refresh every** (default 5 minutes).
@@ -68,8 +70,6 @@ Norwegian catalogs; other languages fall back to English, and right-to-left
 languages mirror the popup). Omarchy 4.0 shows it in English.
 
 ## Development
-
-`kit/` holds shared components copied from [foamy-kit](https://github.com/foamrider/foamy-kit); edit them there, not here.
 
 Shared components come from [foamy-kit](https://github.com/foamrider/foamy-kit)
 and live in `kit/` as stamped copies: change them in foamy-kit and run its
