@@ -222,8 +222,9 @@ def query_lock(timeout: float = 10.0, path: Path | None = None):
     """Serialize HID++ queries across foamy-bolt processes.
 
     Advisory and fail-open: if the runtime directory is unusable the query
-    still runs. Solaar's own GUI does not take this lock; Solaar's rotating
-    per-request software IDs keep those replies apart.
+    still runs. Solaar's own GUI does not take this lock, and both use
+    Solaar's fixed software ID (0x0B), so replies to the same request sent by
+    both at once are not kept apart.
     """
     try:
         fd = _open_lock(path or lock_path())
