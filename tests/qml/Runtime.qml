@@ -11,7 +11,8 @@ import "plugin/kit"
 // one leader owns IPC, the popup body is lazy, the single keyboard cursor,
 // settings saving through the bar, backoff and restart (also after a helper
 // that can't start, stalls or floods its output), teardown when the last
-// instance goes, translations, plurals and RTL mirroring.
+// instance goes, a bar reload while the stopped helper is still exiting,
+// translations, plurals and RTL mirroring.
 ShellRoot {
   id: shell
   readonly property string host: Quickshell.env("FOAMY_HOST")
@@ -392,7 +393,38 @@ ShellRoot {
     after(1200, function() {
       eq(Bolt.BoltService.starts, 8, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
-      finish()
+      stepRejoin()
+    })
+  }
+
+  // The bar reloads (a position change swaps every instance): the last one
+  // leaves and new ones join while the stopped helper is still exiting. The
+  // bars get a helper again as soon as it is gone, not after a failure backoff.
+  function stepRejoin() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    var state = { rejoined: false, exiting: false }
+    function rejoin() {
+      if (service.wanted || state.rejoined) return
+      state.rejoined = true
+      service.wantedChanged.disconnect(rejoin)
+      Qt.callLater(function() { state.exiting = service.running; panels.model = 3 })
+    }
+    service.helper.write("slowstop\n")
+    after(300, function() {
+      service.wantedChanged.connect(rejoin)
+      panels.model = 0
+      after(2000, function() {
+        check(state.rejoined, "the last bar left")
+        eq(state.exiting, true, "new bars joined while the stopped helper was exiting")
+        eq(service.members, 3, "three members again")
+        eq(service.running, true, "bars that came back right away have a helper")
+        eq(service.starts, startsBefore + 1, "started once more")
+        eq(service.failures, 0, "a requested stop is not a failure")
+        eq(service.waiting, false, "no backoff pending")
+        eq(service.payload.status, "ok", "readings, not the stopped-helper error")
+        finish()
+      })
     })
   }
 

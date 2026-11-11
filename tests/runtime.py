@@ -99,7 +99,7 @@ def run(host, lang):
         failures.append(f"FOAMY FAIL shell memory around helper stderr not sampled: {samples}")
     elif end - start > 64 * 1024:
         failures.append(f"FOAMY FAIL 128 MiB of helper stderr kept in the shell: RSS {start} -> {end} KiB")
-    expected = 7  # start, restart, after an error, after a failed start, after a stall, after a flood, re-add
+    expected = 8  # start, restart, after an error, after a failed start, after a stall, after a flood, re-add, reload
     if helpers != expected:
         failures.append(f"FOAMY FAIL helper processes started: {helpers}, expected {expected}")
     ok = "FOAMY DONE" in log and not failures and leader

@@ -43,6 +43,11 @@ QtObject {
   property bool discardOutput: false
   // Unterminated stdout of this run, at most Model.maxLineLength characters.
   property string pendingOutput: ""
+  // stop() asked this run to end. Quickshell keeps `running` true until the
+  // helper has exited (up to a second while Solaar's listeners stop), so a
+  // bar that rejoins meanwhile (the bar reloads) can't start it; its exit
+  // starts the next run instead of counting as a failure.
+  property bool stopRequested: false
   readonly property bool running: helper.running
   readonly property bool waiting: restartTimer.running
 
@@ -59,6 +64,7 @@ QtObject {
     errorSnapshotThisRun = false
     discardOutput = false
     pendingOutput = ""
+    stopRequested = false
     runActive = true
     starts++
     helper.running = true
@@ -69,7 +75,9 @@ QtObject {
     restartTimer.stop()
     watchdog.stop()
     refreshing = false
-    if (helper.running) helper.running = false
+    if (!helper.running) return
+    stopRequested = true
+    helper.running = false
   }
 
   // force: the user asked (Refresh, IPC), so a helper waiting out its
@@ -138,13 +146,22 @@ QtObject {
   // start. Whichever comes first ends the run, so recovery is scheduled once.
   function runEnded(code) {
     if (!runActive) return
+    var requested = stopRequested
     runActive = false
+    stopRequested = false
     discardOutput = false
     pendingOutput = ""
     watchdog.stop()
     refreshing = false
     lastExitCode = code
     if (!wanted) return
+    // Rejoined while stopping: the readings stay; start again from the event
+    // loop, as start() from inside exited() would race its runningChanged.
+    if (requested) {
+      restartTimer.interval = 0
+      restartTimer.restart()
+      return
+    }
     failures++
     if (code !== Model.exitUnavailable) eventError = Model.eventError
     // Nothing produces readings until the restart: show that instead of stale
