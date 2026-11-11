@@ -32,7 +32,7 @@ import harness  # noqa: E402
 
 def ipc_status(run):
     by_id = Path(run.env["XDG_RUNTIME_DIR"]) / "quickshell/by-id"
-    for _ in range(400):  # the run takes about 20 s before FOAMY READY
+    for _ in range(900):  # about 20 s before FOAMY READY, longer on a loaded machine
         ids = [p.name for p in by_id.iterdir()] if by_id.is_dir() else []
         if ids and "FOAMY READY" in (run.base / "qs.log").read_text(errors="replace"):
             break
@@ -80,7 +80,7 @@ def run(host, lang):
     sampler.start()
     try:
         status = ipc_status(r)
-        process.wait(timeout=60)
+        process.wait(timeout=120)
     finally:
         done.set()
         if process.poll() is None:

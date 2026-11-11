@@ -89,6 +89,20 @@ ShellRoot {
     timer.triggered.connect(function() { timer.destroy(); fn() })
     timer.start()
   }
+  // Calls fn once ready() holds, or after timeoutMs (the step's checks then
+  // fail). For steps whose length depends on machine load, where a fixed
+  // delay is either too short on a busy machine or wastes time.
+  function waitFor(ready, timeoutMs, fn) {
+    var deadline = Date.now() + timeoutMs
+    var timer = Qt.createQmlObject('import QtQuick; Timer { interval: 50; repeat: true }', shell)
+    timer.triggered.connect(function() {
+      if (!ready() && Date.now() < deadline) return
+      timer.stop()
+      timer.destroy()
+      fn()
+    })
+    timer.start()
+  }
 
   Component.onCompleted: {
     eq(Bolt.BoltService.running, false, "no helper before any bar instance")
@@ -301,7 +315,9 @@ ShellRoot {
         // tests/runtime.py samples the shell's memory at START and END.
         console.log("FOAMY STDERR START")
         after(1000, function() { service.helper.write("stderr\nrefresh\n") })
-        after(3500, function() {
+        // The reply follows 128 MiB of stderr the shell has to read first:
+        // seconds on a loaded machine.
+        waitFor(function() { return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1" }, 30000, function() {
           console.log("FOAMY STDERR END")
           eq(service.running, true, "stderr noise doesn't stop the helper")
           eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
