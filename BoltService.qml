@@ -36,6 +36,13 @@ QtObject {
   property int starts: 0
   // This run sent an error snapshot (kept over the generic "stopped" error).
   property bool errorSnapshotThisRun: false
+  // A run lasts from start() to its one completion (runEnded), however the
+  // process ends: exit, crash, watchdog kill, or a command that never started.
+  property bool runActive: false
+  // The run is being ended (watchdog, bad output): ignore the rest of its output.
+  property bool discardOutput: false
+  // Unterminated stdout of this run, at most Model.maxLineLength characters.
+  property string pendingOutput: ""
   readonly property bool running: helper.running
   readonly property bool waiting: restartTimer.running
 
@@ -50,9 +57,12 @@ QtObject {
     restartTimer.stop()
     helper.command = helperCommand
     errorSnapshotThisRun = false
-    helper.running = true
+    discardOutput = false
+    pendingOutput = ""
+    runActive = true
     starts++
-    watchdog.restart()
+    helper.running = true
+    if (runActive) watchdog.restart()
   }
 
   function stop() {
@@ -75,14 +85,36 @@ QtObject {
     }
   }
 
+  // stdout arrives in chunks (the helper writes ASCII-only JSON lines), so no
+  // more than one bounded partial line is ever kept.
+  function handleOutput(data) {
+    if (!runActive || discardOutput) return
+    var split = Model.splitLines(pendingOutput, data, Model.maxLineLength)
+    pendingOutput = split.rest
+    for (var i = 0; i < split.lines.length && !discardOutput; i++) handleLine(split.lines[i])
+    if (split.overflow && !discardOutput) invalidOutput()
+  }
+
+  function invalidOutput() {
+    eventError = Model.eventError
+    console.warn("foamy.bolt: invalid helper output")
+    abortRun()
+  }
+
+  // Ends the current run now. A running helper is killed and its exit
+  // completes the run; one that is already gone is completed here.
+  function abortRun() {
+    discardOutput = true
+    if (helper.running) helper.signal(9)
+    else runEnded(-1)
+  }
+
   function handleLine(line) {
     var event
     try {
       event = Model.parseEvent(line)
     } catch (error) {
-      eventError = Model.eventError
-      console.warn("foamy.bolt: invalid helper output")
-      helper.signal(9)
+      invalidOutput()
       return
     }
     watchdog.restart()
@@ -101,7 +133,14 @@ QtObject {
     }
   }
 
-  function exited(code) {
+  // The one completion path. exited() and then running→false both arrive for
+  // a process that ran; only running→false for a command that couldn't
+  // start. Whichever comes first ends the run, so recovery is scheduled once.
+  function runEnded(code) {
+    if (!runActive) return
+    runActive = false
+    discardOutput = false
+    pendingOutput = ""
     watchdog.stop()
     refreshing = false
     lastExitCode = code
@@ -119,17 +158,21 @@ QtObject {
     stdinEnabled: true
     // Solaar's library imports GTK; the helper never draws, so keep it off the display.
     environment: ({ WAYLAND_DISPLAY: null, DISPLAY: null })
-    stdout: SplitParser { onRead: function(line) { service.handleLine(line) } }
-    onExited: function(code) { service.exited(code) }
+    stdout: SplitParser { splitMarker: ""; onRead: function(data) { service.handleOutput(data) } }
+    // Solaar logs to stderr. Unread output would stay buffered in the shell
+    // for the helper's lifetime, so read and drop it.
+    stderr: SplitParser { splitMarker: ""; onRead: function(data) {} }
+    onExited: function(code) { service.runEnded(code) }
+    onRunningChanged: if (!running) service.runEnded(-1)
   }
 
-  // Backoff after a failed run: 30 s doubling to 10 min (5 min first when Solaar is missing).
+  // Backoff after a run ends: 30 s doubling to 10 min (5 min first when Solaar is missing).
   property Timer restartTimer: Timer { onTriggered: service.start() }
 
   // A heartbeat (every 10 s) bounds a stalled helper.
   property Timer watchdog: Timer {
     interval: 45000
-    onTriggered: { service.eventError = Model.eventError; service.helper.signal(9) }
+    onTriggered: { service.eventError = Model.eventError; service.abortRun() }
   }
 
   property Timer poll: Timer {

@@ -107,14 +107,26 @@ Panel {
     })).join(" · ")
   }
 
-  function openSolaar() { launchError = ""; if (!solaarCheck.running) solaarCheck.running = true }
+  function openSolaar() {
+    launchError = ""
+    if (solaarCheck.running) return
+    solaarCheck.pending = true
+    solaarCheck.running = true
+  }
   Process {
     id: solaarCheck
+    // Set per check; exited() and running→false (or only the latter, when sh
+    // couldn't start) both end it, and only the first one counts.
+    property bool pending: false
     command: ["sh", "-c", "command -v solaar >/dev/null 2>&1"]
-    onExited: function(code) {
+    function finish(code) {
+      if (!pending) return
+      pending = false
       if (code === 0) { Quickshell.execDetached(["solaar"]); root.close() }
       else root.launchError = FoamyI18n.t("Could not start Solaar.")
     }
+    onExited: function(code) { finish(code) }
+    onRunningChanged: if (!running) finish(-1)
   }
 
   // Opening asks the running helper for a fresh reading (settingsState resets on close).

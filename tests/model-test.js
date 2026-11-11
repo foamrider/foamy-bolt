@@ -78,3 +78,16 @@ const busy = M.errorPayload('Device query timed out. Try Refresh.')
 assert.equal(M.payloadAfterExit(busy, true), busy, 'a specific error snapshot from this run stays')
 assert.equal(M.payloadAfterExit(busy, false).errors[0], M.helperStoppedError, 'an error from an earlier run is replaced')
 console.log('ok — a stopped helper shows in the displayed state')
+
+// Helper stdout arrives in chunks: lines are split across them, and an
+// unterminated line is bounded instead of growing until the helper exits.
+let split = M.splitLines('', '{"a":1}\n{"b"', 10)
+assert.deepEqual(split, { lines: ['{"a":1}'], rest: '{"b"', overflow: false })
+split = M.splitLines(split.rest, ':2}\n', 10)
+assert.deepEqual(split, { lines: ['{"b":2}'], rest: '', overflow: false })
+assert.deepEqual(M.splitLines('', 'x', 10), { lines: [], rest: 'x', overflow: false }, 'a partial line waits')
+assert.deepEqual(M.splitLines('x'.repeat(8), 'xxx', 10), { lines: [], rest: '', overflow: true }, 'an endless line is dropped')
+assert.deepEqual(M.splitLines('', 'x'.repeat(11) + '\nok', 10), { lines: [], rest: '', overflow: true }, 'an oversized finished line too')
+assert.equal(M.splitLines('', 'x'.repeat(10), 10).overflow, false, 'the limit itself is allowed')
+assert.ok(M.maxLineLength >= 65536, 'room for a full status line')
+console.log('ok — helper output is split into bounded lines')

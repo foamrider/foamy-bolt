@@ -61,4 +61,15 @@ function restartDelay(failures,exitCode) {
   var first=exitCode===exitUnavailable ? 300000 : 30000
   return Math.min(600000,first*Math.pow(2,Math.max(0,failures-1)))
 }
-if (typeof module !== "undefined") module.exports={battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}
+// Longest helper stdout line kept (a status line is a few KiB).
+var maxLineLength=262144
+// Splits a stdout chunk onto the unterminated rest of the previous ones.
+// overflow: a line (finished or not) is longer than limit; nothing is kept.
+function splitLines(rest,chunk,limit) {
+  var lines=(rest+chunk).split("\n")
+  var tail=lines.pop()
+  var overflow=tail.length>limit
+  for (var i=0;i<lines.length && !overflow;i++) if (lines[i].length>limit) overflow=true
+  return overflow ? {lines:[],rest:"",overflow:true} : {lines:lines,rest:tail,overflow:false}
+}
+if (typeof module !== "undefined") module.exports={splitLines:splitLines,maxLineLength:maxLineLength,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}
