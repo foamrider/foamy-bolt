@@ -4,10 +4,38 @@ Logitech receiver and battery status for the Omarchy bar.
 
 ![Foamy Bolt screenshot](preview.png)
 
-## Install
+## Requirements: Solaar and receiver access (manual setup)
 
-Requires Omarchy 4.5, Python 3 and Solaar (`solaar`),
-with Solaar able to access your receivers (its udev rules).
+Foamy Bolt reads devices through [Solaar](https://pwr-solaar.github.io/Solaar/)'s
+Python library. Solaar is **not** installed by Omarchy and not installed by
+this plugin; install it yourself:
+
+```sh
+sudo pacman -S solaar
+```
+
+The plugin also needs read/write access to the receiver's `hidraw` device.
+The `solaar` package installs the udev rule for that
+(`/usr/lib/udev/rules.d/42-logitech-unify-permissions.rules`, which gives the
+user logged in at the seat access to Logitech `hidraw` devices through
+`uaccess`). pacman applies the rule when Solaar is installed; if the receiver
+still can't be opened, replug it. No group membership, root helper or extra
+daemon is needed, and the Solaar app does not have to be running.
+
+Without them, the plugin keeps working but shows no devices:
+
+- Solaar not installed: the widget turns urgent and the popup says
+  "Solaar Python support is not installed." The helper retries after 5 minutes,
+  then every 10 minutes; Refresh retries right away. Opening Solaar
+  (right-click) shows "Could not start Solaar."
+- No access to the receiver: the popup says
+  "Cannot open receiver. Check Solaar device permissions."
+- No receiver plugged in: "No receiver connected" (the widget can be hidden
+  in that case, see Settings).
+
+Also requires Omarchy 4.5 and Python 3 (both present on Omarchy).
+
+## Install
 
 ```sh
 omarchy plugin add https://github.com/foamrider/foamy-bolt.git --enable
@@ -53,8 +81,12 @@ on for Solaar.
   moved, the popup says "This Solaar version isn't supported". Tested with
   Solaar 1.1.20; run `python3 tests/test_solaar_compat.py` after a Solaar
   upgrade.
-- If the helper stops, it restarts after 30 seconds, doubling up to 10 minutes.
-  Without Solaar it waits 5 minutes, then 10. Clicking Refresh starts it right away.
+- If the helper stops (it exits, crashes, cannot start, or sends nothing for
+  45 seconds and is stopped), it restarts after 30 seconds, doubling up to
+  10 minutes. Without Solaar it waits 5 minutes, then 10. Clicking Refresh
+  starts it right away.
+- The shell keeps at most 256 KiB of unfinished helper output and drops the
+  helper's log output (stderr) as it arrives.
 - The helper keeps device identifiers out of logs and runs without access to
   the display.
 

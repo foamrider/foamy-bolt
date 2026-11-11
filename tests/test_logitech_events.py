@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -148,6 +149,16 @@ def poll_only_api(receivers=()):
     base = SimpleNamespace(receivers=lambda: list(receivers))
     return SimpleNamespace(base=base, receiver=SimpleNamespace(create_receiver=lambda b, i: None),
                            version="9.9", events=None, events_missing=["listener.EventsListener"])
+
+
+class EmitterTest(unittest.TestCase):
+    def test_lines_are_ascii_so_chunked_reads_cannot_split_a_character(self):
+        stream = io.StringIO()
+        EVENTS.Emitter(stream).emit("status", payload={"devices": [{"name": "Tastatur æøå 🖱"}]})
+        line = stream.getvalue()
+        self.assertTrue(line.endswith("\n") and line.count("\n") == 1)
+        self.assertTrue(line.isascii())
+        self.assertEqual(json.loads(line)["payload"]["devices"][0]["name"], "Tastatur æøå 🖱")
 
 
 class HelperTest(unittest.TestCase):
