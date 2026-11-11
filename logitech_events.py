@@ -234,6 +234,11 @@ def listener_class(api, on_change):
                 self.failed = True
             finally:
                 self.ready = False
+                # A listener that ended (has_started raised when the receiver
+                # refused notification flags) is not stuck in Solaar: without
+                # this, BUSY_LIMIT would end the helper instead of the rescan
+                # replacing it while snapshots continue.
+                self.busy_since = 0.0
                 try:
                     # Leave notification flags enabled for other clients such as Solaar.
                     with self.guard:

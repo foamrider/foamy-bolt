@@ -269,6 +269,54 @@ class HelperTest(unittest.TestCase):
         self.assertLess(spins, 10, f"{spins} select() calls while the worker was busy")
         self.assertEqual(len(calls), 3, "the pending change is read after the slow query")
 
+    def test_listener_that_cannot_enable_notifications_degrades_to_polling(self):
+        # Regression: a receiver that refused notification flags (Solaar
+        # returns None) left the dead listener marked busy, so BUSY_LIMIT
+        # later ended the whole helper and the shell crash-looped it with
+        # backoff instead of reading on the refresh interval.
+        class EventsListener(threading.Thread):  # Solaar's start-up order
+            def __init__(self, receiver, callback):
+                super().__init__(daemon=True)
+                self.receiver = receiver
+                self.active = False
+
+            def run(self):
+                self.active = True
+                self.has_started()
+                while self.active:
+                    time.sleep(0.01)
+
+            def stop(self):
+                self.active = False
+
+        class Receiver:
+            def enable_connection_notifications(self):
+                return None
+
+            def close(self):
+                pass
+
+            def __iter__(self):
+                return iter(())
+
+        api = poll_only_api([SimpleNamespace(path="/dev/hidraw-test", product_id="C548")])
+        api.receiver.create_receiver = lambda base, info: Receiver()
+        api.events = SimpleNamespace(listener=EventsListener, wireless=0x01)
+        emitter = FakeEmitter()
+        with unittest.mock.patch.object(EVENTS, "BUSY_LIMIT", 0.3):
+            helper = EVENTS.Helper(api, emitter)
+            thread = self.start(helper)
+            self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) >= 1))
+            time.sleep(0.5)  # past BUSY_LIMIT since the listener was created
+            helper.request()  # wake the loop so it checks its limits now
+            # Without the fix the loop raises here, before this snapshot.
+            self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) >= 2))
+            self.assertTrue(thread.is_alive(), "the helper keeps serving snapshots")
+            self.assertFalse(helper.healthy())
+            helper.stop(); thread.join(5)
+        self.assertEqual(self.rc, 0)
+        self.assertEqual(emitter.statuses()[-1]["payload"]["status"], "ok")
+
     def test_borrowed_receivers_are_only_ready_live_listeners(self):
         helper = EVENTS.Helper(poll_only_api(), FakeEmitter())
         ready = SimpleNamespace(ready=True, failed=False, is_alive=lambda: True, receiver="r1", guard="g1")
