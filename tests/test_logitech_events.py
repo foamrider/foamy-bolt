@@ -162,6 +162,15 @@ class EmitterTest(unittest.TestCase):
 
 
 class HelperTest(unittest.TestCase):
+    def setUp(self):
+        # Snapshots take the cross-process query lock: use a private runtime
+        # dir, never the one a running shell's helper locks for its readings.
+        runtime = tempfile.TemporaryDirectory()
+        self.addCleanup(runtime.cleanup)
+        environment = unittest.mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": runtime.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def start(self, helper):
         thread = threading.Thread(target=lambda: setattr(self, "rc", helper.run()), daemon=True)
         thread.start()
