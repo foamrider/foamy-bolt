@@ -127,7 +127,9 @@ class Emitter:
         self.lock = threading.Lock()
 
     def emit(self, event: str, **fields) -> None:
-        line = json.dumps({"event": event, **fields}, ensure_ascii=False, separators=(",", ":"))
+        # ASCII only: the shell reads stdout in chunks, which may split a
+        # multi-byte character; JSON escapes keep every chunk valid text.
+        line = json.dumps({"event": event, **fields}, separators=(",", ":"))
         with self.lock:
             try:
                 self.stream.write(line + "\n")

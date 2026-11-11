@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -31,7 +32,7 @@ import harness  # noqa: E402
 
 def ipc_status(run):
     by_id = Path(run.env["XDG_RUNTIME_DIR"]) / "quickshell/by-id"
-    for _ in range(100):
+    for _ in range(400):  # the run takes about 20 s before FOAMY READY
         ids = [p.name for p in by_id.iterdir()] if by_id.is_dir() else []
         if ids and "FOAMY READY" in (run.base / "qs.log").read_text(errors="replace"):
             break
@@ -41,6 +42,27 @@ def ipc_status(run):
     result = subprocess.run(["qs", "ipc", "-i", ids[0], "call", "foamy.bolt", "status"], env=run.env,
                             capture_output=True, text=True, timeout=10)
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def rss_kib(pid):
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def watch_rss(log_path, pid, samples, done):
+    """The shell's resident memory at FOAMY STDERR START and END: 128 MiB of
+    helper stderr must not stay buffered in the shell."""
+    while not done.is_set() and len(samples) < 2:
+        log = log_path.read_text(errors="replace") if log_path.exists() else ""
+        for marker in ("START", "END"):
+            if marker not in samples and f"FOAMY STDERR {marker}" in log:
+                samples[marker] = rss_kib(pid)
+        time.sleep(0.05)
 
 
 def run(host, lang):
@@ -53,12 +75,17 @@ def run(host, lang):
     log_path = r.base / "qs.log"
     process = subprocess.Popen(["qs", "-p", str(r.root), "--no-color"], env=r.env, stdout=log_path.open("w"),
                                stderr=subprocess.STDOUT, start_new_session=True)
+    samples, done = {}, threading.Event()
+    sampler = threading.Thread(target=watch_rss, args=(log_path, process.pid, samples, done), daemon=True)
+    sampler.start()
     try:
         status = ipc_status(r)
         process.wait(timeout=60)
     finally:
+        done.set()
         if process.poll() is None:
             process.kill()
+    sampler.join(timeout=5)
     log = log_path.read_text(errors="replace")
     result = next((line.split("FOAMY RESULT ", 1)[1] for line in log.splitlines() if "FOAMY RESULT" in line), "no result")
     failures = [line for line in log.splitlines() if "FOAMY FAIL" in line or any(m in line for m in harness.FAILURE_MARKERS)]
@@ -67,8 +94,14 @@ def run(host, lang):
     except ValueError:
         leader = False
     helpers = len(starts.read_text().split()) if starts.exists() else 0
-    if helpers != 4:
-        failures.append(f"FOAMY FAIL helper processes started: {helpers}, expected 4 (start, restart, restart after an error, re-add)")
+    start, end = samples.get("START"), samples.get("END")
+    if start is None or end is None:
+        failures.append(f"FOAMY FAIL shell memory around helper stderr not sampled: {samples}")
+    elif end - start > 64 * 1024:
+        failures.append(f"FOAMY FAIL 128 MiB of helper stderr kept in the shell: RSS {start} -> {end} KiB")
+    expected = 7  # start, restart, after an error, after a failed start, after a stall, after a flood, re-add
+    if helpers != expected:
+        failures.append(f"FOAMY FAIL helper processes started: {helpers}, expected {expected}")
     ok = "FOAMY DONE" in log and not failures and leader
     print(f"{'PASS' if ok else 'FAIL'} runtime {host} {lang}: {result}; ipc status from leader: {leader}")
     if not ok:

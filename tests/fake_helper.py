@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Stand-in for logitech_events.py in runtime tests: speaks the same protocol
 with canned devices and never touches hardware. Each start appends a line to
-$FOAMY_BOLT_STARTS; `fail` sends an error snapshot and exits 1; the receiver's productId counts `refresh` commands and its
-name says whether DISPLAY/WAYLAND_DISPLAY reached the helper."""
+$FOAMY_BOLT_STARTS; `fail` sends an error snapshot and exits 1; `hang` stops
+answering (a stalled helper for the watchdog); `flood` writes an endless
+line; `stderr` writes 128 MiB of log noise to stderr. The receiver's productId
+counts `refresh` commands and its name says whether DISPLAY/WAYLAND_DISPLAY
+reached the helper."""
 import json
 import os
 import sys
@@ -37,3 +40,16 @@ for line in sys.stdin:
                  "errors": ["Device query timed out. Try Refresh."]}
         print(json.dumps({"event": "status", "payload": error}), flush=True)
         sys.exit(1)
+    elif line.strip() == "hang":  # test hook: alive but silent, until killed
+        while True:
+            time.sleep(60)
+    elif line.strip() == "flood":  # test hook: output with no line end, until killed
+        chunk = "x" * 65536
+        while True:
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+    elif line.strip() == "stderr":  # test hook: log noise the shell must not keep
+        for _ in range(2048):
+            sys.stderr.write("x" * 65535 + "\n")
+        sys.stderr.flush()
+        status(count)

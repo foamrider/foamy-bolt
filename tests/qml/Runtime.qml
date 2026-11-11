@@ -9,8 +9,9 @@ import "plugin/kit"
 // Foamy Bolt under a real host shell, offscreen: three bar instances (as on
 // three monitors) share ONE helper (a fake that speaks the helper protocol),
 // one leader owns IPC, the popup body is lazy, the single keyboard cursor,
-// settings saving through the bar, backoff and restart, teardown when the
-// last instance goes, translations, plurals and RTL mirroring.
+// settings saving through the bar, backoff and restart (also after a helper
+// that can't start, stalls or floods its output), teardown when the last
+// instance goes, translations, plurals and RTL mirroring.
 ShellRoot {
   id: shell
   readonly property string host: Quickshell.env("FOAMY_HOST")
@@ -184,7 +185,7 @@ ShellRoot {
     eq(service.running, false, "helper ended")
     eq(service.failures, 1, "failure counted")
     eq(service.waiting, true, "restart waits out the backoff")
-    eq(service.restartTimer.interval, 30000, "first backoff is 30 s")
+    eq(service.restartTimer.interval, 30000, "first backoff is 30 s (exited and running→false schedule once)")
     eq(service.payload.status, "error", "a stopped helper shows as an error")
     eq(service.payload.errors[0], "Device readings stopped. Retrying automatically.", "stopped-helper message")
     eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
@@ -211,9 +212,105 @@ ShellRoot {
     after(900, function() {
       eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
       eq(Bolt.BoltService.payload.status, "ok", "readings back")
-      checkScroll()
-      panels.model = 0
-      after(700, stepSix)
+      stepCantStart()
+    })
+  }
+
+  // The helper command can't start: Quickshell clears running without
+  // exited(). Recovery is scheduled once, and readings come back on the
+  // scheduled restart once the command works again.
+  function stepCantStart() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    service.helperCommand = ["/nonexistent/foamy-bolt-helper"]
+    service.helper.signal(15)
+    after(700, function() {
+      // That exit scheduled a restart; take it now with the broken command.
+      eq(service.waiting, true, "restart scheduled after the exit")
+      service.restartTimer.interval = 50
+      after(700, function() {
+        eq(service.starts, startsBefore + 1, "scheduled restart tried the broken command")
+        eq(service.running, false, "command that can't start isn't running")
+        eq(service.runActive, false, "its run is over")
+        eq(service.lastExitCode, -1, "ended without an exit code")
+        eq(service.failures, 2, "failed start counted once")
+        eq(service.waiting, true, "failed start schedules a restart")
+        eq(service.restartTimer.interval, 60000, "with the backoff")
+        eq(service.payload.status, "error", "failed start shows as an error")
+        eq(service.payload.errors[0], "Device readings stopped. Retrying automatically.", "stopped-helper message after a failed start")
+        // A watchdog firing with nothing running schedules nothing more.
+        service.watchdog.triggered()
+        eq(service.failures, 2, "watchdog without a run counts nothing")
+        eq(service.restartTimer.interval, 60000, "and keeps the backoff")
+        service.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
+        service.restartTimer.interval = 50
+        after(900, function() {
+          eq(service.starts, startsBefore + 2, "scheduled restart after a failed start")
+          eq(service.running, true, "helper running after a failed start")
+          eq(service.payload.status, "ok", "readings back after a failed start")
+          eq(service.failures, 0, "backoff reset")
+          stepHang()
+        })
+      })
+    })
+  }
+
+  // A helper that stops answering is killed by the watchdog, and that
+  // schedules recovery exactly like an exit.
+  function stepHang() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    service.watchdog.interval = 400
+    service.watchdog.restart()
+    service.helper.write("hang\n")
+    after(1200, function() {
+      eq(service.running, false, "watchdog killed the stalled helper")
+      eq(service.lastExitCode, 9, "with SIGKILL")
+      eq(service.failures, 1, "stall counted once")
+      eq(service.waiting, true, "stall schedules a restart")
+      eq(service.restartTimer.interval, 30000, "with the first backoff")
+      eq(service.eventError, "Device event monitoring unavailable. Periodic refresh is still active.", "stall reported")
+      eq(service.payload.status, "error", "stalled helper shows as an error")
+      service.watchdog.interval = 45000
+      service.restartTimer.interval = 50
+      after(900, function() {
+        eq(service.starts, startsBefore + 1, "scheduled restart after a stall")
+        eq(service.payload.status, "ok", "readings back after a stall")
+        stepFlood()
+      })
+    })
+  }
+
+  // Output with no line end is bounded: past Model.maxLineLength the helper
+  // is killed as invalid, and recovery is scheduled. Unread stderr is drained.
+  function stepFlood() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    check(service.helper.stderr !== null, "helper stderr is read, not buffered")
+    service.helper.write("flood\n")
+    after(1500, function() {
+      eq(service.running, false, "endless line ends the helper")
+      eq(service.pendingOutput, "", "no partial line kept")
+      eq(service.failures, 1, "flood counted once")
+      eq(service.waiting, true, "flood schedules a restart")
+      service.restartTimer.interval = 50
+      after(900, function() {
+        eq(service.starts, startsBefore + 1, "scheduled restart after a flood")
+        eq(service.payload.status, "ok", "readings back after a flood")
+        // tests/runtime.py samples the shell's memory at START and END.
+        console.log("FOAMY STDERR START")
+        after(1000, function() { service.helper.write("stderr\nrefresh\n") })
+        after(3500, function() {
+          console.log("FOAMY STDERR END")
+          eq(service.running, true, "stderr noise doesn't stop the helper")
+          eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
+          after(600, function() {
+            checkScroll()
+            panels.model = 0
+            after(700, stepSix)
+          })
+        })
+      })
     })
   }
 
@@ -293,7 +390,7 @@ ShellRoot {
     eq(service.waiting, false, "no restart pending")
     panels.model = 3
     after(1200, function() {
-      eq(Bolt.BoltService.starts, 4, "helper starts again with the bars")
+      eq(Bolt.BoltService.starts, 8, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
       finish()
     })
