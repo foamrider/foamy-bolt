@@ -115,10 +115,10 @@ Panel {
   }
   Process {
     id: solaarCheck
-    // Set per check; exited() and running→false (or only the latter, when sh
-    // couldn't start) both end it, and only the first one counts.
+    // Set per check; exited() and running→false (or only the latter, when the
+    // command couldn't start) both end it, and only the first one counts.
     property bool pending: false
-    command: ["sh", "-c", "command -v solaar >/dev/null 2>&1"]
+    command: ["omarchy-cmd-present", "solaar"]
     function finish(code) {
       if (!pending) return
       pending = false

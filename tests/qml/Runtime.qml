@@ -12,7 +12,7 @@ import "plugin/kit"
 // settings saving through the bar, backoff and restart (also after a helper
 // that can't start, stalls or floods its output), teardown when the last
 // instance goes, a bar reload while the stopped helper is still exiting,
-// translations, plurals and RTL mirroring.
+// opening Solaar, translations, plurals and RTL mirroring.
 ShellRoot {
   id: shell
   readonly property string host: Quickshell.env("FOAMY_HOST")
@@ -323,8 +323,10 @@ ShellRoot {
           eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
           after(600, function() {
             checkScroll()
-            panels.model = 0
-            after(700, stepSix)
+            stepSolaar(function() {
+              panels.model = 0
+              after(700, stepSix)
+            })
           })
         })
       })
@@ -398,6 +400,26 @@ ShellRoot {
     var to = isNaN(wheel.destination) ? list.contentY : wheel.destination
     check(Math.abs(to - Math.min(wheel.notch, wheel.maxY)) < 1, "one wheel notch scrolls about three rows: " + to)
     wheel.scrollTo(0, false)
+  }
+
+  // Right-click checks for Solaar with omarchy-cmd-present (a fake that
+  // reports it missing first, then present; tests/runtime.py checks what ran):
+  // missing explains itself and keeps the popup, present launches it and closes.
+  function stepSolaar(next) {
+    var first = panels.itemAt(0)
+    first.open()
+    first.openSolaar()
+    waitFor(function() { return first.launchError !== "" }, 10000, function() {
+      eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "missing Solaar explained")
+      eq(first.opened, true, "the popup stays open")
+      first.openSolaar()
+      eq(first.launchError, "", "a new check clears the error")
+      waitFor(function() { return !first.opened }, 10000, function() {
+        eq(first.opened, false, "Solaar found: the popup closes")
+        eq(first.launchError, "", "and no error")
+        next()
+      })
+    })
   }
 
   function stepSix() {

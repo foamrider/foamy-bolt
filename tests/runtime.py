@@ -2,7 +2,10 @@
 """Load Foamy Bolt offscreen on Omarchy 4.5
 with the foamy-kit harness: isolated HOME/XDG/runtime dirs, no Wayland or
 Hyprland, no Solaar or receiver touched (tests/fake_helper.py stands in for the helper). Checks tests/qml/Runtime.qml plus
-`qs ipc call foamy.bolt status` answered by the leader.
+`qs ipc call foamy.bolt status` answered by the leader. Omarchy's bin
+directories are dropped from PATH and fakes stand in for omarchy-cmd-present
+and solaar, so no host script or the real Solaar runs; an AppImage's
+LD_LIBRARY_PATH ($APPDIR) is dropped as well.
 
 FOAMY_KIT (default ~/GitHub/Personal/foamy-kit) provides the harness.
 The host is Omarchy 4.5: FOAMY_HOST_45, else $OMARCHY_TEST_ROOT/shell, else
@@ -28,6 +31,32 @@ if not os.environ.get("FOAMY_HOST_45"):
 HOST_40 = bool(os.environ.get("FOAMY_HOST_40"))
 sys.path.insert(0, str(KIT / "preview"))
 import harness  # noqa: E402
+
+
+# Reports solaar missing on the first check and present after; logs its arguments.
+FAKE_CMD_PRESENT = """#!/bin/sh
+printf '%s\\n' "$*" >> "$FOAMY_BOLT_CMD_LOG"
+[ "$(wc -l < "$FOAMY_BOLT_CMD_LOG")" -gt 1 ]
+"""
+FAKE_SOLAAR = """#!/bin/sh
+printf 'launched %s\\n' "$*" >> "$FOAMY_BOLT_SOLAAR_LOG"
+"""
+
+
+def isolate(env, host, base):
+    """Omarchy's bin directories and an AppImage's libraries out; the fakes first on PATH."""
+    bins = {os.path.realpath("/usr/share/omarchy/bin"), os.path.realpath(Path(host).parent / "bin")}
+    fakes = base / "bin"
+    fakes.mkdir()
+    for name, text in (("omarchy-cmd-present", FAKE_CMD_PRESENT), ("solaar", FAKE_SOLAAR)):
+        (fakes / name).write_text(text)
+        (fakes / name).chmod(0o755)
+    path = [p for p in env.get("PATH", "/usr/bin:/bin").split(":") if p and os.path.realpath(p) not in bins]
+    env["PATH"] = ":".join([str(fakes)] + path)
+    appdir = os.environ.get("APPDIR", "").rstrip("/")
+    env["LD_LIBRARY_PATH"] = ":".join(p for p in env.get("LD_LIBRARY_PATH", "").split(":")
+                                      if p and not (appdir and (p == appdir or p.startswith(appdir + "/"))))
+    env.update(FOAMY_BOLT_CMD_LOG=str(base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(base / "solaar.log"))
 
 
 def ipc_status(run):
@@ -69,6 +98,7 @@ def run(host, lang):
     shell = (PLUGIN / "tests/qml/Runtime.qml").read_text()
     r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"foamy-bolt-runtime-{host}-{lang}-")
     starts = r.base / "helper-starts"
+    isolate(r.env, harness.HOSTS[host], r.base)
     # DISPLAY is set on purpose: the helper must not receive it.
     r.env.update(FOAMY_LANG=lang, FOAMY_HOLD_MS="3000", DISPLAY=":99",
                  FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"), FOAMY_BOLT_STARTS=str(starts))
@@ -94,6 +124,10 @@ def run(host, lang):
     except ValueError:
         leader = False
     helpers = len(starts.read_text().split()) if starts.exists() else 0
+    for name, expected_text in (("cmd-present.log", "solaar\nsolaar\n"), ("solaar.log", "launched \n")):
+        found = (r.base / name).read_text() if (r.base / name).exists() else ""
+        if found != expected_text:
+            failures.append(f"FOAMY FAIL {name}: {found!r}, expected {expected_text!r}")
     start, end = samples.get("START"), samples.get("END")
     if start is None or end is None:
         failures.append(f"FOAMY FAIL shell memory around helper stderr not sampled: {samples}")
