@@ -391,7 +391,8 @@ ShellRoot {
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that
   // reports it missing first, then present; tests/runtime.py checks what ran):
-  // missing explains itself and keeps the popup, present launches it and closes.
+  // missing explains itself and keeps the popup, present launches it through
+  // uwsm-app (a fake as well) and closes.
   function stepSolaar(next) {
     var first = panels.itemAt(0)
     first.open()

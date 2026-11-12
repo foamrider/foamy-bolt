@@ -4,8 +4,8 @@ with the foamy-kit harness: isolated HOME/XDG/runtime dirs, no Wayland or
 Hyprland, no Solaar or receiver touched (tests/fake_helper.py stands in for the helper). Checks tests/qml/Runtime.qml plus
 `qs ipc call foamy.bolt status` answered by the leader. The harness keeps
 Omarchy's bin directories and an AppImage's libraries out and stubs every
-other omarchy command; fakes stand in for omarchy-cmd-present and solaar,
-so no host script or the real Solaar runs, and a host command the QML
+other omarchy command; fakes stand in for omarchy-cmd-present,
+uwsm-app and solaar, so no host script or the real Solaar runs, and a host command the QML
 tried anyway fails the run.
 
 FOAMY_KIT (default ~/GitHub/Personal/foamy-kit) provides the harness.
@@ -39,6 +39,11 @@ printf '%s\\n' "$*" >> "$FOAMY_BOLT_CMD_LOG"
 """
 FAKE_SOLAAR = """#!/bin/sh
 printf 'launched %s\\n' "$*" >> "$FOAMY_BOLT_SOLAAR_LOG"
+"""
+# Records the launch and starts nothing: the real uwsm-app would run Solaar in
+# a scope of the user's systemd manager.
+FAKE_UWSM_APP = """#!/bin/sh
+printf '%s\\n' "$*" >> "$FOAMY_BOLT_UWSM_LOG"
 """
 
 
@@ -83,12 +88,14 @@ def run(host, lang):
     # unix socket path over 107 bytes fails to bind (no `qs ipc` reply) when
     # TMPDIR is a longer path than /tmp.
     r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"bolt-{lang}-",
-                    fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR})
+                    fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR,
+                             "uwsm-app": FAKE_UWSM_APP})
     starts = r.base / "helper-starts"
     # DISPLAY is set on purpose: the helper must not receive it.
     r.env.update(FOAMY_LANG=lang, FOAMY_HOLD_MS="3000", DISPLAY=":99",
                  FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"), FOAMY_BOLT_STARTS=str(starts),
-                 FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(r.base / "solaar.log"))
+                 FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(r.base / "solaar.log"),
+                 FOAMY_BOLT_UWSM_LOG=str(r.base / "uwsm-app.log"))
     r.start()
     samples, done = {}, threading.Event()
     sampler = threading.Thread(target=watch_rss, args=(r.base / "qs.log", r.process.pid, samples, done), daemon=True)
@@ -109,7 +116,10 @@ def run(host, lang):
         leader = False
     helpers = len(starts.read_text().split()) if starts.exists() else 0
     failures += [f"FOAMY FAIL host command tried: {line}" for line in r.host_commands()]
-    for name, expected_text in (("cmd-present.log", "solaar\nsolaar\n"), ("solaar.log", "launched \n")):
+    # Solaar is checked twice (missing, then present) and launched once, through
+    # uwsm-app as the host launches apps, never directly.
+    launches = (("cmd-present.log", "solaar\nsolaar\n"), ("uwsm-app.log", "-- solaar\n"), ("solaar.log", ""))
+    for name, expected_text in launches:
         found = (r.base / name).read_text() if (r.base / name).exists() else ""
         if found != expected_text:
             failures.append(f"FOAMY FAIL {name}: {found!r}, expected {expected_text!r}")

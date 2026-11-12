@@ -122,7 +122,9 @@ Panel {
     function finish(code) {
       if (!pending) return
       pending = false
-      if (code === 0) { Quickshell.execDetached(["solaar"]); root.close() }
+      // uwsm-app gives Solaar its own app scope, as the host launches apps,
+      // instead of the compositor service's cgroup.
+      if (code === 0) { Quickshell.execDetached(["uwsm-app", "--", "solaar"]); root.close() }
       else root.launchError = FoamyI18n.t("Could not start Solaar.")
     }
     onExited: function(code) { finish(code) }
