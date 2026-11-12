@@ -11,7 +11,8 @@ import "plugin/kit"
 // one leader owns IPC, the popup body is lazy, the single keyboard cursor,
 // settings saving through the bar, backoff and restart (also after a helper
 // that can't start, stalls or floods its output), teardown when the last
-// instance goes, translations, plurals and RTL mirroring.
+// instance goes, a bar reload while the stopped helper is still exiting,
+// opening Solaar, translations, plurals and RTL mirroring.
 ShellRoot {
   id: shell
   readonly property string host: Quickshell.env("FOAMY_HOST")
@@ -21,7 +22,10 @@ ShellRoot {
 
   function check(ok, label) {
     checks++
-    if (!ok) { failures++; console.log("FOAMY FAIL " + host + "/" + lang + " " + label) }
+    if (!ok) {
+      failures++
+      console.log("FOAMY FAIL " + host + "/" + lang + " " + label)
+    }
   }
   function eq(actual, expected, label) {
     check(actual === expected, label + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
@@ -31,7 +35,9 @@ ShellRoot {
     implicitWidth: 1920
     implicitHeight: 1080
     color: "black"
-    ScreenSim { id: sim }
+    ScreenSim {
+      id: sim
+    }
     Row {
       y: 4
       x: 1200
@@ -42,13 +48,20 @@ ShellRoot {
         Bolt.Panel {
           bar: mockBar
           moduleName: "foamy.bolt"
-          settings: ({ id: "foamy.bolt", layout: "list", extra: "kept" })
+          settings: ({
+              id: "foamy.bolt",
+              layout: "list",
+              extra: "kept"
+            })
         }
       }
     }
   }
 
-  MockBar { id: mockBar; moduleName: "foamy.bolt" }
+  MockBar {
+    id: mockBar
+    moduleName: "foamy.bolt"
+  }
 
   FloatingWindow {
     implicitWidth: 420
@@ -57,43 +70,79 @@ ShellRoot {
       id: tallView
       width: 420
       height: 320
-      readonly property var many: [0, 1, 2, 3, 4, 5, 6, 7].map(function(i) { return { name: "Device " + i, kindIcon: "mouse", online: true, battery: 50, charging: false } })
-      payload: ({ status: "ok", receivers: [{ name: "Bolt Receiver", productId: "C548" }], devices: many, errors: [] })
+      readonly property var many: [0, 1, 2, 3, 4, 5, 6, 7].map(function (i) {
+        return {
+          name: "Device " + i,
+          kindIcon: "mouse",
+          online: true,
+          battery: 50,
+          charging: false
+        }
+      })
+      payload: ({
+          status: "ok",
+          receivers: [
+            {
+              name: "Bolt Receiver",
+              productId: "C548"
+            }
+          ],
+          devices: many,
+          errors: []
+        })
       devices: many
       onlineCount: 8
-      settings: ({ layout: "tiles" })
+      settings: ({
+          layout: "tiles"
+        })
     }
   }
 
-  // textKey is (text) on 4.0 and (text, modifiers) on 4.5: the kit emits the right one.
-  FoamyCursor { id: keys }
-  function key(view, text) { keys.emitTextKey(view, text, 0) }
+  // Emits PanelKeyCatcher.textKey(text, modifiers) the way the host does.
+  FoamyCursor {
+    id: keys
+  }
+  function key(view, text) {
+    keys.emitTextKey(view, text, 0)
+  }
   function findByName(item, name) {
-    if (!item) return null
-    if (item.objectName === name) return item
+    if (!item)
+      return null
+    if (item.objectName === name)
+      return item
     for (var i = 0; i < item.children.length; i++) {
       var found = findByName(item.children[i], name)
-      if (found) return found
+      if (found)
+        return found
     }
     return null
   }
   function leaders() {
     var count = 0
-    for (var i = 0; i < panels.count; i++) if (panels.itemAt(i).statusObject().leader) count++
+    for (var i = 0; i < panels.count; i++)
+      if (panels.itemAt(i).statusObject().leader)
+        count++
     return count
   }
-  function after(ms, fn) {
-    var timer = Qt.createQmlObject('import QtQuick; Timer { }', shell)
-    timer.interval = ms
-    timer.triggered.connect(function() { timer.destroy(); fn() })
-    timer.start()
+  // Each step waits for the state it checks (kit harness FoamyWait), never a
+  // fixed delay: a timeout logs FOAMY FAIL with the label and the step's
+  // checks then report what is missing.
+  FoamyWait {
+    id: wait
+  }
+  function waitFor(ready, label, fn) {
+    wait.waitFor(ready, 30000, function () {
+      fn()
+    }, label)
   }
 
   Component.onCompleted: {
     eq(Bolt.BoltService.running, false, "no helper before any bar instance")
     Bolt.BoltService.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
     panels.model = 3
-    after(1500, stepOne)
+    waitFor(function () {
+      return leaders() === 1 && Bolt.BoltService.members === 3 && Bolt.BoltService.payload.status === "ok"
+    }, "the helper's first snapshot", stepOne)
   }
 
   function stepOne() {
@@ -113,15 +162,21 @@ ShellRoot {
     var glyph = shell.findByName(first, "barGlyph")
     check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
     eq(first.popup.bodyItem, null, "popup body is lazy")
+    shell.tooltipChecks(first)
     first.open()
-    after(700, stepTwo)
+    waitFor(function () {
+      return first.popup.bodyItem !== null
+    }, "the popup body is built", stepTwo)
   }
 
   function stepTwo() {
     var first = panels.itemAt(0)
     var view = first.popup.bodyItem
     check(view !== null, "body built on open")
-    if (!view) { finish(); return }
+    if (!view) {
+      finish()
+      return
+    }
     eq(view.devices.length, 2, "offline devices hidden by default")
     eq(view.cursorKey, "", "no cursor highlight on open")
     view.moveRequested(0, 1)
@@ -137,10 +192,19 @@ ShellRoot {
     shell.key(view, "r")
     eq(Bolt.BoltService.refreshing, true, "r asks the helper for a snapshot")
     eq(view.LayoutMirroring.enabled, shell.lang === "ar", "popup body mirrors in RTL only")
-    var plural = { en: "1 device connected", no: "1 enhet tilkoblet", ar: "1 device connected" }
-    if (shell.lang !== "ar") eq(FoamyI18n.tn("%1 devices connected", 1), plural[shell.lang], "plural one")
-    var many = { en: "2 devices connected", no: "2 enheter tilkoblet" }
-    if (shell.lang !== "ar") eq(FoamyI18n.tn("%1 devices connected", 2), many[shell.lang], "plural other")
+    var plural = {
+      en: "1 device connected",
+      no: "1 enhet tilkoblet",
+      ar: "1 device connected"
+    }
+    if (shell.lang !== "ar")
+      eq(FoamyI18n.tn("%1 devices connected", 1), plural[shell.lang], "plural one")
+    var many = {
+      en: "2 devices connected",
+      no: "2 enheter tilkoblet"
+    }
+    if (shell.lang !== "ar")
+      eq(FoamyI18n.tn("%1 devices connected", 2), many[shell.lang], "plural other")
     shell.key(view, "s")
     eq(first.editingSettings, true, "s opens Settings")
     eq(view.blocked, true, "settings page owns the keys")
@@ -160,7 +224,10 @@ ShellRoot {
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
     first.close()
-    after(800, stepThree)
+    waitFor(function () {
+      var p = Bolt.BoltService.payload
+      return !Bolt.BoltService.refreshing && p.receivers.length > 0 && p.receivers[0].productId === "N2"
+    }, "both refreshes are answered", stepThree)
   }
 
   function stepThree() {
@@ -177,7 +244,9 @@ ShellRoot {
     first.close()
     eq(first.editingSettings, false, "Settings resets on close")
     service.helper.signal(15)
-    after(700, stepFour)
+    waitFor(function () {
+      return !service.runActive && service.waiting
+    }, "the terminated helper's run ends", stepFour)
   }
 
   function stepFour() {
@@ -191,7 +260,9 @@ ShellRoot {
     eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
     eq(panels.itemAt(0).degraded, true, "bar shows the degraded state")
     panels.itemAt(1).refresh(true)
-    after(900, stepFive)
+    waitFor(function () {
+      return service.starts === 2 && service.failures === 0 && service.payload.status === "ok"
+    }, "Refresh restarts the helper", stepFive)
   }
 
   function stepFive() {
@@ -201,7 +272,9 @@ ShellRoot {
     eq(service.failures, 0, "a good snapshot resets the backoff")
     eq(service.payload.status, "ok", "readings back after the restart")
     service.helper.write("fail\n")
-    after(700, stepFiveB)
+    waitFor(function () {
+      return !service.runActive
+    }, "the failing helper's run ends", stepFiveB)
   }
 
   function stepFiveB() {
@@ -209,7 +282,9 @@ ShellRoot {
     eq(service.running, false, "helper failed")
     eq(service.payload.errors[0], "Device query timed out. Try Refresh.", "its own error snapshot is kept")
     panels.itemAt(0).refresh(true)
-    after(900, function() {
+    waitFor(function () {
+      return Bolt.BoltService.starts === 3 && Bolt.BoltService.payload.status === "ok"
+    }, "Refresh restarts it again", function () {
       eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
       eq(Bolt.BoltService.payload.status, "ok", "readings back")
       stepCantStart()
@@ -224,11 +299,15 @@ ShellRoot {
     var startsBefore = service.starts
     service.helperCommand = ["/nonexistent/foamy-bolt-helper"]
     service.helper.signal(15)
-    after(700, function() {
+    waitFor(function () {
+      return !service.runActive && service.waiting
+    }, "the exit schedules a restart", function () {
       // That exit scheduled a restart; take it now with the broken command.
       eq(service.waiting, true, "restart scheduled after the exit")
       service.restartTimer.interval = 50
-      after(700, function() {
+      waitFor(function () {
+        return service.starts === startsBefore + 1 && !service.runActive
+      }, "the broken command's run ends", function () {
         eq(service.starts, startsBefore + 1, "scheduled restart tried the broken command")
         eq(service.running, false, "command that can't start isn't running")
         eq(service.runActive, false, "its run is over")
@@ -244,7 +323,9 @@ ShellRoot {
         eq(service.restartTimer.interval, 60000, "and keeps the backoff")
         service.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
         service.restartTimer.interval = 50
-        after(900, function() {
+        waitFor(function () {
+          return service.starts === startsBefore + 2 && service.payload.status === "ok"
+        }, "readings after a failed start", function () {
           eq(service.starts, startsBefore + 2, "scheduled restart after a failed start")
           eq(service.running, true, "helper running after a failed start")
           eq(service.payload.status, "ok", "readings back after a failed start")
@@ -263,7 +344,9 @@ ShellRoot {
     service.watchdog.interval = 400
     service.watchdog.restart()
     service.helper.write("hang\n")
-    after(1200, function() {
+    waitFor(function () {
+      return !service.runActive
+    }, "the watchdog ends the stalled run", function () {
       eq(service.running, false, "watchdog killed the stalled helper")
       eq(service.lastExitCode, 9, "with SIGKILL")
       eq(service.failures, 1, "stall counted once")
@@ -273,7 +356,9 @@ ShellRoot {
       eq(service.payload.status, "error", "stalled helper shows as an error")
       service.watchdog.interval = 45000
       service.restartTimer.interval = 50
-      after(900, function() {
+      waitFor(function () {
+        return service.starts === startsBefore + 1 && service.payload.status === "ok"
+      }, "readings after a stall", function () {
         eq(service.starts, startsBefore + 1, "scheduled restart after a stall")
         eq(service.payload.status, "ok", "readings back after a stall")
         stepFlood()
@@ -288,30 +373,139 @@ ShellRoot {
     var startsBefore = service.starts
     check(service.helper.stderr !== null, "helper stderr is read, not buffered")
     service.helper.write("flood\n")
-    after(1500, function() {
+    waitFor(function () {
+      return !service.runActive
+    }, "the flooding run ends", function () {
       eq(service.running, false, "endless line ends the helper")
       eq(service.pendingOutput, "", "no partial line kept")
       eq(service.failures, 1, "flood counted once")
       eq(service.waiting, true, "flood schedules a restart")
       service.restartTimer.interval = 50
-      after(900, function() {
+      waitFor(function () {
+        return service.starts === startsBefore + 1 && service.payload.status === "ok"
+      }, "readings after a flood", function () {
         eq(service.starts, startsBefore + 1, "scheduled restart after a flood")
         eq(service.payload.status, "ok", "readings back after a flood")
-        // tests/runtime.py samples the shell's memory at START and END.
+        // tests/runtime.py samples the shell's memory at START and END. It
+        // polls the log every 50 ms; this gap lets it take START before the
+        // noise. A late START only shrinks the measured growth.
         console.log("FOAMY STDERR START")
-        after(1000, function() { service.helper.write("stderr\nrefresh\n") })
-        after(3500, function() {
+        wait.after(1000, function () {
+          service.helper.write("stderr\nrefresh\n")
+        })
+        // The reply follows 128 MiB of stderr the shell has to read first:
+        // seconds on a loaded machine.
+        waitFor(function () {
+          return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1"
+        }, "the reply after 128 MiB of stderr", function () {
           console.log("FOAMY STDERR END")
           eq(service.running, true, "stderr noise doesn't stop the helper")
           eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
-          after(600, function() {
-            checkScroll()
+          checkScroll()
+          stepSolaar(function () {
             panels.model = 0
-            after(700, stepSix)
+            waitFor(function () {
+              return service.members === 0 && !service.running
+            }, "the helper stops with the last bar", stepSix)
           })
         })
       })
     })
+  }
+
+  // The bar tooltip carries device names and helper errors, and the host's
+  // tooltip has no size limit of its own: kit FoamyText caps it at 6 lines of
+  // 100 characters. One device per line under the "Logitech" heading, so five
+  // devices fit, a long name is cut on its own line, and more devices than
+  // fit end in a visible "…".
+  function tooltipChecks(first) {
+    var service = Bolt.BoltService
+    if (shell.lang === "en")
+      eq(first.tooltip(), "Logitech\nMX Master 3S 12%\nMX Keys S 64%", "one online device per line under the heading")
+    var kept = service.payload
+    function devices(names) {
+      return names.map(function (name, i) {
+        return {
+          name: name,
+          online: true,
+          battery: 10 * (i + 1),
+          charging: false
+        }
+      })
+    }
+    function reading(names) {
+      service.payload = ({
+          status: "ok",
+          receivers: [
+            {
+              name: "Bolt Receiver",
+              productId: "C548"
+            }
+          ],
+          errors: [],
+          devices: devices(names)
+        })
+      return first.tooltip().split("\n")
+    }
+    function line(name, i) {
+      return FoamyI18n.t("%1 %2", [name, FoamyI18n.t("%1%", 10 * (i + 1))])
+    }
+    var five = ["MX Master 3S", "MX Keys S", "MX Anywhere 3S", "MX Mechanical Mini", "Lift Vertical Ergonomic Mouse"]
+    eq(JSON.stringify(reading(five)), JSON.stringify([FoamyI18n.t("Logitech")].concat(five.map(line))), "five devices all show, one per line")
+    var cut = reading(["MX Master 3S", "N".repeat(300), "MX Keys S"])
+    eq(cut.length, 4, "a long name keeps its own line")
+    var long = cut[2] || ""
+    check(Array.from(long).length === 100 && long.slice(-1) === "…", "a long name is cut with …: " + long.length)
+    eq(cut[3], line("MX Keys S", 2), "the next device still shows in full")
+    eq(reading(["MX Master 3S", "Two\nlines"])[2], line("Two lines", 1), "a name with a line break stays on one line")
+    var eight = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]
+    var more = reading(eight)
+    eq(more.length, 6, "more devices than fit: six lines")
+    eq(more[5], line("D5", 4) + "…", "and the last one says the list goes on")
+    check(more.indexOf(line("D6", 5)) < 0, "devices past the cap are not shown as if complete")
+    function bounded(label) {
+      var lines = first.tooltip().split("\n")
+      check(lines.length <= 6 && lines.every(function (line) {
+        return Array.from(line).length <= 100
+      }), label + ": " + lines.length + " lines, longest " + Math.max.apply(null, lines.map(function (line) {
+        return line.length
+      })))
+    }
+    long = "x".repeat(5000)
+    var lines = Array(50).fill("Device").join("\n")
+    service.payload = ({
+        status: "ok",
+        receivers: [
+          {
+            name: "Bolt Receiver",
+            productId: "C548"
+          }
+        ],
+        errors: [],
+        devices: [
+          {
+            name: long,
+            online: true,
+            battery: 50,
+            charging: false
+          },
+          {
+            name: lines,
+            online: true,
+            battery: 40,
+            charging: false
+          }
+        ]
+      })
+    bounded("device names are capped in the tooltip")
+    service.payload = ({
+        status: "error",
+        receivers: [],
+        devices: [],
+        errors: Array(100).fill(long)
+      })
+    bounded("helper errors are capped in the tooltip")
+    service.payload = kept
   }
 
   // The device list scrolls when it is taller than the card, and the keyboard
@@ -323,9 +517,15 @@ ShellRoot {
   function thresholdChecks(first, view) {
     var field = shell.findByName(view, "thresholdInput")
     check(field !== null && field.field !== undefined, "threshold is a FoamyNumberField")
-    if (!field) return
+    if (!field)
+      return
     eq(field.field.text, "30", "shows the saved threshold")
-    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 20 })
+    first.settings = ({
+        id: "foamy.bolt",
+        layout: "tiles",
+        extra: "kept",
+        lowBatteryThreshold: 20
+      })
     eq(field.field.text, "20", "an external change shows while Settings is open")
     var saves = mockBar.saved.length
     field.field.focusInput()
@@ -333,13 +533,21 @@ ShellRoot {
     view.forceActiveFocus()
     field.field.editingFinished()
     eq(mockBar.saved.length, saves, "tabbing through the unchanged field saves nothing")
-    first.settings = ({ id: "foamy.bolt", layout: "tiles", extra: "kept", lowBatteryThreshold: 25 })
+    first.settings = ({
+        id: "foamy.bolt",
+        layout: "tiles",
+        extra: "kept",
+        lowBatteryThreshold: 25
+      })
     eq(field.field.text, "25", "a second external change still shows (binding intact)")
     field.field.text = "45"
     field.field.textEdited()
     // The editor's key path (keyPressed → handleKey); the handler marks the key
     // accepted when handleKey returns true, so FoamySettingsPage never sees it.
-    field.field.keyPressed({ key: Qt.Key_Escape, accepted: false })
+    field.field.keyPressed({
+      key: Qt.Key_Escape,
+      accepted: false
+    })
     eq(field.handleKey(Qt.Key_Escape), true, "Escape is consumed by the field")
     eq(field.field.text, "25", "Escape restores the saved value")
     eq(first.editingSettings, true, "and stays on Settings")
@@ -348,7 +556,8 @@ ShellRoot {
     field.field.textEdited()
     field.field.accepted()
     eq(mockBar.saved.length, saves + 1, "a changed number is saved once")
-    if (mockBar.saved.length === saves + 1) eq(mockBar.saved[saves].settings.lowBatteryThreshold, 15, "saved threshold")
+    if (mockBar.saved.length === saves + 1)
+      eq(mockBar.saved[saves].settings.lowBatteryThreshold, 15, "saved threshold")
     field.field.editingFinished()
     eq(mockBar.saved.length, saves + 1, "not saved twice")
     field.field.text = "150"
@@ -362,25 +571,59 @@ ShellRoot {
   function checkScroll() {
     var list = shell.findByName(tallView, "listScroll")
     check(list !== null, "list has a scroll container")
-    if (!list) return
+    if (!list)
+      return
     check(list.contentHeight > list.height, "eight tiles overflow a 320 px card: " + list.contentHeight + " > " + list.height)
     eq(list.interactive, true, "overflowing list can be scrolled")
     eq(list.contentY, 0, "starts at the top")
-    for (var i = 0; i < 4; i++) tallView.moveRequested(0, 1)
+    for (var i = 0; i < 4; i++)
+      tallView.moveRequested(0, 1)
     eq(tallView.cursorKey, "refresh", "cursor reaches the footer")
     check(list.contentY > 0, "footer scrolled into view")
-    tallView.moveRequested(0, -1); tallView.moveRequested(0, -1); tallView.moveRequested(0, -1)
+    tallView.moveRequested(0, -1)
+    tallView.moveRequested(0, -1)
+    tallView.moveRequested(0, -1)
     eq(tallView.cursorKey, "settings", "back to the header")
     // A mouse-wheel notch scrolls about three rows (FoamyWheelScroll), even
     // when a high-resolution wheel splits it into 8 x 15.
     var wheel = tallView.listWheel
     check(!!wheel && wheel.target === list, "the list scrolls with the kit wheel handling")
-    if (!wheel) return
+    if (!wheel)
+      return
     wheel.scrollTo(0, false)
-    for (var n = 0; n < 8; n++) wheel.wheel({ angleDelta: Qt.point(0, -15), pixelDelta: Qt.point(0, 0) })
+    for (var n = 0; n < 8; n++)
+      wheel.wheel({
+        angleDelta: Qt.point(0, -15),
+        pixelDelta: Qt.point(0, 0)
+      })
     var to = isNaN(wheel.destination) ? list.contentY : wheel.destination
     check(Math.abs(to - Math.min(wheel.notch, wheel.maxY)) < 1, "one wheel notch scrolls about three rows: " + to)
     wheel.scrollTo(0, false)
+  }
+
+  // Right-click checks for Solaar with omarchy-cmd-present (a fake that
+  // reports it missing first, then present; tests/runtime.py checks what ran):
+  // missing explains itself and keeps the popup, present launches it through
+  // uwsm-app (a fake as well) and closes.
+  function stepSolaar(next) {
+    var first = panels.itemAt(0)
+    first.open()
+    first.openSolaar()
+    waitFor(function () {
+      return first.launchError !== ""
+    }, "the missing-Solaar error", function () {
+      eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "missing Solaar explained")
+      eq(first.opened, true, "the popup stays open")
+      first.openSolaar()
+      eq(first.launchError, "", "a new check clears the error")
+      waitFor(function () {
+        return !first.opened
+      }, "Solaar opens and the popup closes", function () {
+        eq(first.opened, false, "Solaar found: the popup closes")
+        eq(first.launchError, "", "and no error")
+        next()
+      })
+    })
   }
 
   function stepSix() {
@@ -389,10 +632,57 @@ ShellRoot {
     eq(service.running, false, "helper stops with the last bar instance")
     eq(service.waiting, false, "no restart pending")
     panels.model = 3
-    after(1200, function() {
+    // The new run's first snapshot is N0 (the stopped run's N1 stays until then).
+    waitFor(function () {
+      var p = Bolt.BoltService.payload
+      return Bolt.BoltService.running && leaders() === 1 && p.receivers.length > 0 && p.receivers[0].productId === "N0"
+    }, "the helper starts with the bars again", function () {
       eq(Bolt.BoltService.starts, 8, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
-      finish()
+      stepRejoin()
+    })
+  }
+
+  // The bar reloads (a position change swaps every instance): the last one
+  // leaves and new ones join while the stopped helper is still exiting. The
+  // bars get a helper again as soon as it is gone, not after a failure backoff.
+  function stepRejoin() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    var state = {
+      rejoined: false,
+      exiting: false
+    }
+    function rejoin() {
+      if (service.wanted || state.rejoined)
+        return
+      state.rejoined = true
+      service.wantedChanged.disconnect(rejoin)
+      Qt.callLater(function () {
+        state.exiting = service.running
+        panels.model = 3
+      })
+    }
+    // The refresh reply (N1) proves the fake has read "slowstop": it handles stdin in order.
+    service.helper.write("slowstop\nrefresh\n")
+    waitFor(function () {
+      return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1"
+    }, "the fake has its slow SIGTERM", function () {
+      service.wantedChanged.connect(rejoin)
+      panels.model = 0
+      waitFor(function () {
+        return state.rejoined && service.running && service.starts === startsBefore + 1 && service.payload.status === "ok"
+      }, "the bars that came back get a helper", function () {
+        check(state.rejoined, "the last bar left")
+        eq(state.exiting, true, "new bars joined while the stopped helper was exiting")
+        eq(service.members, 3, "three members again")
+        eq(service.running, true, "bars that came back right away have a helper")
+        eq(service.starts, startsBefore + 1, "started once more")
+        eq(service.failures, 0, "a requested stop is not a failure")
+        eq(service.waiting, false, "no backoff pending")
+        eq(service.payload.status, "ok", "readings, not the stopped-helper error")
+        finish()
+      })
     })
   }
 
@@ -405,6 +695,9 @@ ShellRoot {
   Timer {
     id: finishTimer
     interval: shell.holdMs
-    onTriggered: { console.log("FOAMY DONE"); Qt.quit() }
+    onTriggered: {
+      console.log("FOAMY DONE")
+      Qt.quit()
+    }
   }
 }

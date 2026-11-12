@@ -18,6 +18,24 @@ for (const raw of ['', 'null', '{}', JSON.stringify({ ...payload, devices: [{ na
 assert.throws(() => M.parsePayload({ ...payload, devices: Array(101).fill(payload.devices[0]) }))
 console.log('ok — unknown battery, online filtering, malformed and oversized payloads')
 
+// The bar tooltip: one entry per line under the heading, capped by the kit
+// (Panel passes it through FoamyText.tooltip()).
+const FoamyText = require('../kit/node-loader.cjs').load('FoamyText')
+const tip = entries => FoamyText.tooltip(M.tooltipText('Logitech', entries)).split('\n')
+const five = ['MX Master 3S 10%', 'MX Keys S 20%', 'MX Anywhere 3S 30%', 'MX Mechanical Mini 40%', 'Lift Vertical Ergonomic Mouse 50%']
+assert.deepEqual(tip(five), ['Logitech', ...five], 'five devices all show')
+const cut = tip(['MX Master 3S 10%', 'N'.repeat(300) + ' 20%', 'MX Keys S 30%'])
+assert.equal(cut.length, 4)
+assert.equal([...cut[2]].length, 100)
+assert.ok(cut[2].endsWith('…'), 'a long name is cut on its own line')
+assert.equal(cut[3], 'MX Keys S 30%')
+assert.deepEqual(tip(['Two\nlines 10%', 'Three\r\nline\u2028name 20%']), ['Logitech', 'Two lines 10%', 'Three line name 20%'])
+const eight = tip(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'])
+assert.equal(eight.length, 6)
+assert.equal(eight[5], 'D5…', 'more devices than fit: the last line says the list goes on')
+assert.deepEqual(M.tooltipText('Logitech', []), 'Logitech')
+console.log('ok — bar tooltip: one device per line, long names and long lists cut visibly')
+
 assert.deepEqual(manifest.barWidget.schema, Schema.fields)
 for (const f of Schema.fields) {
   assert.ok(Prefs.valid(Schema.fields, f.key, f.defaultValue))

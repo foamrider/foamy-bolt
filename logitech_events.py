@@ -37,10 +37,10 @@ STATUS_FEATURES = {0x1000, 0x1001, 0x1004, 0x1F20, 0x1D4B}
 WATCH_ERROR = "Device event monitoring unavailable. Periodic refresh is still active."
 EXIT_UNAVAILABLE = 3
 
-DEBOUNCE = 0.35       # coalesce a burst of receiver notifications
-HEALTH_EVERY = 10.0   # heartbeat for the shell's watchdog
-RESCAN_EVERY = 30.0   # retry failed receivers, reconcile suspend/resume
-BUSY_LIMIT = 25.0     # a stuck Solaar call ends the helper (the shell restarts it)
+DEBOUNCE = 0.35  # coalesce a burst of receiver notifications
+HEALTH_EVERY = 10.0  # heartbeat for the shell's watchdog
+RESCAN_EVERY = 30.0  # retry failed receivers, reconcile suspend/resume
+BUSY_LIMIT = 25.0  # a stuck Solaar call ends the helper (the shell restarts it)
 
 
 def _load_status():
@@ -234,6 +234,11 @@ def listener_class(api, on_change):
                 self.failed = True
             finally:
                 self.ready = False
+                # A listener that ended (has_started raised when the receiver
+                # refused notification flags) is not stuck in Solaar: without
+                # this, BUSY_LIMIT would end the helper instead of the rescan
+                # replacing it while snapshots continue.
+                self.busy_since = 0.0
                 try:
                     # Leave notification flags enabled for other clients such as Solaar.
                     with self.guard:
@@ -254,8 +259,8 @@ class Helper:
         self.stopping = threading.Event()
         self.wakeup = Wakeup()
         self.flags = threading.Lock()
-        self.requested = True          # first snapshot at start
-        self.changed_since = None      # first change of a burst
+        self.requested = True  # first snapshot at start
+        self.changed_since = None  # first change of a burst
         self.listeners = {}
         self.scan_failed = False
         self.worker = QueryWorker(self.snapshot, emitter, self.wakeup.set)
@@ -280,8 +285,7 @@ class Helper:
     def borrowed(self) -> dict:
         with self.flags:
             workers = list(self.listeners.items())
-        return {path: (w.receiver, w.guard) for path, w in workers
-                if w.ready and not w.failed and w.is_alive()}
+        return {path: (w.receiver, w.guard) for path, w in workers if w.ready and not w.failed and w.is_alive()}
 
     def snapshot(self) -> dict:
         return STATUS.snapshot(self.api, self.borrowed())

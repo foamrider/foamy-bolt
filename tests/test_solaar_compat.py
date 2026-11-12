@@ -12,13 +12,16 @@ from pathlib import Path
 import threading
 import unittest
 
-SPEC = importlib.util.spec_from_file_location("logitech_status", Path(__file__).resolve().parents[1] / "logitech_status.py")
+SPEC = importlib.util.spec_from_file_location(
+    "logitech_status", Path(__file__).resolve().parents[1] / "logitech_status.py"
+)
 STATUS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(STATUS)
 
 try:
     logging.disable(logging.CRITICAL)
     import logitech_receiver  # noqa: F401
+
     INSTALLED = True
 except ImportError:
     INSTALLED = False
@@ -37,12 +40,14 @@ class InstalledSolaarTest(unittest.TestCase):
     def test_listener_thread_handle_model(self):
         # The helper relies on per-thread receiver handles (one query thread).
         from logitech_receiver import listener
+
         self.assertTrue(hasattr(listener, "_ThreadedHandle"), "per-thread handles moved")
         self.assertTrue(issubclass(listener.EventsListener, threading.Thread))
 
     def test_private_device_cache_still_exists(self):
         # Optional (feature-detected in status_notification); flag drift early.
         from logitech_receiver import receiver
+
         source = Path(receiver.__file__).read_text()
         self.assertIn("self._devices", source)
 

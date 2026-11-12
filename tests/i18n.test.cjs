@@ -46,6 +46,5 @@ assert.equal((manifest.barWidget?.schema || []).some(f => f.key === 'language'),
 assert.equal(I.text('Unknown %1 {name}', 'no', ['$& %2']), 'Unknown $& %2 {name}');
 assert.equal(I.text('constructor', 'no'), 'constructor');
 assert.equal(I.text('%1%', 'no', [42]), '42 %');
-assert.ok(I.source.includes('Qt.createQmlObject'), '4.0 must not statically require a 4.5 QML type');
 assert.ok(!fs.existsSync(path.join(root, 'FoamyI18n.qml')), 'the forked FoamyI18n is gone');
 console.log(`ok — ${Object.keys(I.en).length} catalog entries, ${literals.length} literals checked`);

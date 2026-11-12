@@ -72,9 +72,17 @@ handles for every reading, so no second Python process is started. It does
 not apply Solaar profiles or change pairing, and it leaves notification flags
 on for Solaar.
 
-- Hardware queries from foamy-bolt processes are serialized with a lock in
-  `$XDG_RUNTIME_DIR/foamy-bolt/`. Solaar's own GUI can run at the same time;
-  its requests use separate software IDs.
+- The helper is Python on purpose, unlike the Rust helpers in other Foamy
+  plugins: Solaar's receiver library carries years of device quirks, and
+  foamy-bolt uses it rather than its own copy of the protocol.
+- Snapshot queries (the battery and device readings) from foamy-bolt
+  processes are serialized with a lock in `$XDG_RUNTIME_DIR/foamy-bolt/`.
+  The event listener's own requests, which turn on connection notifications
+  and look up a device feature after a notification, don't take that lock.
+  Solaar's own GUI can run at the same time, but it doesn't take the lock
+  either, and every one of them sends Solaar's fixed software ID (0x0B), so
+  their replies aren't kept apart: the same request sent by two of them at
+  the same moment can be answered to either.
 - Solaar has no stable Python API. The helper checks every Solaar name it uses
   when it starts. If the event API moved, readings continue on the refresh
   interval and the shell log says which names are missing. If the reading API
@@ -108,12 +116,19 @@ and live in `kit/` as stamped copies: change them in foamy-kit and run its
 `sync.sh`, never edit them here.
 
 ```sh
+mise install                                  # once: the linters and formatters foamy-kit pins
+tests/validate.sh                             # every lint, format and test check below
+tests/validate.sh --ci                        # what GitHub's runner can do (no Quickshell or Omarchy)
+```
+
+`tests/validate.sh` ends with `tests/suite.sh`, which runs these:
+
+```sh
 node tests/model-test.js && node tests/i18n.test.cjs
 python3 -I tests/test_logitech_events.py && python3 -I tests/test_logitech_status.py
 python3 -I tests/test_solaar_compat.py        # against the installed Solaar, no hardware access
-python3 -I tests/test_clipboard.py
-python3 -I tests/runtime.py                   # offscreen on the installed 4.5 shell, 4.0 only with FOAMY_HOST_40 (needs foamy-kit's harness)
-bash tests/kit-check.sh
+python3 -I tests/test_clipboard.py            # stand-ins from foamy-kit's hostenv; suite.sh --ci skips the QML case
+python3 -I tests/runtime.py                   # offscreen on the installed 4.5 shell (needs foamy-kit's harness)
 ```
 
 `preview/Preview.qml` holds mock states for foamy-kit's screenshot harness.

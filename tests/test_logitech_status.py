@@ -49,63 +49,92 @@ class LogitechStatusTest(unittest.TestCase):
         info = type("ReceiverInfo", (), {"product_id": "C547"})()
         self.assertEqual(STATUS.receiver_label(info), "Lightspeed Receiver")
 
+
 class ReceiverQueryTest(unittest.TestCase):
     def query(self, device, close_error=False):
         class Receiver:
             # A device at slot 5 with a count of 1 catches sequential-slot scans.
-            def count(self): return 1
-            def __getitem__(self, index): return device if index == 5 else None
-            def __iter__(self): return iter([self[5]])
+            def count(self):
+                return 1
+
+            def __getitem__(self, index):
+                return device if index == 5 else None
+
+            def __iter__(self):
+                return iter([self[5]])
+
             def close(self):
-                if close_error: raise OSError("private hardware path")
+                if close_error:
+                    raise OSError("private hardware path")
+
         info = SimpleNamespace(product_id="C548", path="/dev/private-test-path")
-        api = SimpleNamespace(base=SimpleNamespace(receivers=lambda: [info]),
-                              receiver=SimpleNamespace(create_receiver=lambda base, info: Receiver()))
+        api = SimpleNamespace(
+            base=SimpleNamespace(receivers=lambda: [info]),
+            receiver=SimpleNamespace(create_receiver=lambda base, info: Receiver()),
+        )
         return STATUS._snapshot(api, {})
 
     def test_sparse_pairing_slots_are_reported(self):
-        device=SimpleNamespace(name="Test keyboard",kind="keyboard",ping=lambda:True,battery=lambda:Battery(60))
-        result=self.query(device)
-        self.assertEqual(len(result["devices"]),1)
-        self.assertEqual(result["devices"][0]["battery"],60)
-        self.assertNotIn("path",result["receivers"][0])
+        device = SimpleNamespace(name="Test keyboard", kind="keyboard", ping=lambda: True, battery=lambda: Battery(60))
+        result = self.query(device)
+        self.assertEqual(len(result["devices"]), 1)
+        self.assertEqual(result["devices"][0]["battery"], 60)
+        self.assertNotIn("path", result["receivers"][0])
 
     def test_failed_ping_stays_offline_and_does_not_query_battery(self):
-        def battery(): raise AssertionError("must not query offline device")
-        result=self.query(SimpleNamespace(name="Test mouse",kind="mouse",ping=lambda:False,battery=battery))
+        def battery():
+            raise AssertionError("must not query offline device")
+
+        result = self.query(SimpleNamespace(name="Test mouse", kind="mouse", ping=lambda: False, battery=battery))
         self.assertFalse(result["devices"][0]["online"])
         self.assertIsNone(result["devices"][0]["battery"])
-        self.assertEqual(result["errors"],[])
+        self.assertEqual(result["errors"], [])
 
     def test_online_device_with_unknown_battery_is_not_empty(self):
-        result=self.query(SimpleNamespace(name="Test mouse",kind="mouse",ping=lambda:True,battery=lambda:None))
+        result = self.query(SimpleNamespace(name="Test mouse", kind="mouse", ping=lambda: True, battery=lambda: None))
         self.assertTrue(result["devices"][0]["online"])
         self.assertIsNone(result["devices"][0]["battery"])
 
     def test_query_errors_are_explicit_and_do_not_leak_hardware_details(self):
-        def battery(): raise OSError("private hardware path")
-        result=self.query(SimpleNamespace(name="Test mouse",kind="mouse",ping=lambda:True,battery=battery))
-        self.assertEqual(result["status"],"partial")
-        self.assertEqual(result["errors"],["Some device readings are unavailable."])
-        self.assertNotIn("private hardware path",str(result))
+        def battery():
+            raise OSError("private hardware path")
+
+        result = self.query(SimpleNamespace(name="Test mouse", kind="mouse", ping=lambda: True, battery=battery))
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["errors"], ["Some device readings are unavailable."])
+        self.assertNotIn("private hardware path", str(result))
 
     def test_receiver_close_failure_is_reported(self):
-        result=self.query(SimpleNamespace(name="Test mouse",kind="mouse",ping=lambda:True,battery=lambda:None),True)
-        self.assertIn("Unable to close receiver.",result["errors"])
+        result = self.query(
+            SimpleNamespace(name="Test mouse", kind="mouse", ping=lambda: True, battery=lambda: None), True
+        )
+        self.assertIn("Unable to close receiver.", result["errors"])
 
     def test_borrowed_listener_receiver_is_used_under_its_guard_and_not_closed(self):
         events = []
+
         class Guard:
-            def __enter__(self): events.append("enter")
-            def __exit__(self, *args): events.append("exit")
+            def __enter__(self):
+                events.append("enter")
+
+            def __exit__(self, *args):
+                events.append("exit")
+
         class Receiver:
             def __iter__(self):
                 events.append("iterate")
-                return iter([SimpleNamespace(name="Mouse", kind="mouse", ping=lambda: True, battery=lambda: Battery(5))])
-            def close(self): raise AssertionError("a borrowed receiver stays open")
+                return iter(
+                    [SimpleNamespace(name="Mouse", kind="mouse", ping=lambda: True, battery=lambda: Battery(5))]
+                )
+
+            def close(self):
+                raise AssertionError("a borrowed receiver stays open")
+
         info = SimpleNamespace(product_id="C548", path="/dev/hidraw-test")
-        api = SimpleNamespace(base=SimpleNamespace(receivers=lambda: [info]),
-                              receiver=SimpleNamespace(create_receiver=lambda b, i: self.fail("must not reopen")))
+        api = SimpleNamespace(
+            base=SimpleNamespace(receivers=lambda: [info]),
+            receiver=SimpleNamespace(create_receiver=lambda _base, _info: self.fail("must not reopen")),
+        )
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"XDG_RUNTIME_DIR": directory}):
             result = STATUS.snapshot(api, {"/dev/hidraw-test": (Receiver(), Guard())})
         self.assertEqual(events, ["enter", "iterate", "exit"])
@@ -125,7 +154,9 @@ class QueryLockTest(unittest.TestCase):
                         pass
                 self.assertGreaterEqual(time.monotonic() - started, 0.3)
             finally:
-                holder.kill(); holder.wait(); holder.stdout.close()
+                holder.kill()
+                holder.wait()
+                holder.stdout.close()
             with STATUS.query_lock(0.3, path) as locked:
                 self.assertTrue(locked)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
@@ -155,13 +186,20 @@ class SolaarApiTest(unittest.TestCase):
 
     def fake(self, **overrides):
         import threading
+
         class Listener(threading.Thread):
-            def has_started(self): pass
-            def stop(self): pass
+            def has_started(self):
+                pass
+
+            def stop(self):
+                pass
+
         class Receiver:
-            def enable_connection_notifications(self): pass
+            def enable_connection_notifications(self):
+                pass
+
         base = SimpleNamespace(receivers=lambda: [])
-        receiver = SimpleNamespace(create_receiver=lambda low_level, info: None, Receiver=Receiver)
+        receiver = SimpleNamespace(create_receiver=lambda _low_level, _info: None, Receiver=Receiver)
         listener = SimpleNamespace(EventsListener=Listener)
         constants = SimpleNamespace(NotificationFlag=SimpleNamespace(WIRELESS=0x100))
         parts = {"base": base, "receiver": receiver, "listener": listener, "hidpp10_constants": constants}
@@ -179,13 +217,12 @@ class SolaarApiTest(unittest.TestCase):
 
     def test_moved_snapshot_names_are_reported(self):
         with self.assertRaises(STATUS.SolaarUnsupported) as caught:
-            self.load(self.fake(base=SimpleNamespace(), receiver=SimpleNamespace(create_receiver=lambda only: None)))
+            self.load(self.fake(base=SimpleNamespace(), receiver=SimpleNamespace(create_receiver=lambda _only: None)))
         self.assertEqual(caught.exception.missing, ["base.receivers", "receiver.create_receiver(low_level, info)"])
         self.assertIn("missing base.receivers", caught.exception.detail)
 
     def test_moved_event_names_keep_snapshots(self):
-        api = self.load(self.fake(listener=SimpleNamespace(EventsListener=object),
-                                  hidpp10_constants=SimpleNamespace()))
+        api = self.load(self.fake(listener=SimpleNamespace(EventsListener=object), hidpp10_constants=SimpleNamespace()))
         self.assertIsNone(api.events)
         self.assertEqual(api.events_missing, ["listener.EventsListener", "hidpp10_constants.NotificationFlag.WIRELESS"])
 
