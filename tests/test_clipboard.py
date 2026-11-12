@@ -202,8 +202,11 @@ ShellRoot {
             display = Path(os.environ["WAYLAND_DISPLAY"])
             if not display.is_absolute():
                 env["WAYLAND_DISPLAY"] = str(Path(os.environ["XDG_RUNTIME_DIR"]) / display)
+        # Only a hang guard: the QtTest cases bound each step themselves. The run
+        # takes about 9 s on an idle machine and 30-45 s at a load of 40, since
+        # every case starts Python clipboard fakes.
         result = subprocess.run(
-            [runner, "-p", str(fixture), "--no-color"], env=env, text=True, capture_output=True, timeout=35
+            [runner, "-p", str(fixture), "--no-color"], env=env, text=True, capture_output=True, timeout=120
         )
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
