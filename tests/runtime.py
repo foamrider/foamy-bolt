@@ -94,7 +94,10 @@ def watch_rss(log_path, pid, samples, done):
 
 def run(host, lang):
     shell = (PLUGIN / "tests/qml/Runtime.qml").read_text()
-    r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"foamy-bolt-runtime-{host}-{lang}-")
+    # A short prefix: qs's IPC socket sits five levels below this dir, and a
+    # unix socket path over 107 bytes fails to bind (no `qs ipc` reply) when
+    # TMPDIR is a longer path than /tmp.
+    r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"bolt-{lang}-")
     starts = r.base / "helper-starts"
     isolate(r.env, harness.HOSTS[host], r.base)
     # DISPLAY is set on purpose: the helper must not receive it.
