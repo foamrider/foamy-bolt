@@ -127,7 +127,7 @@ tests/validate.sh --ci                        # what GitHub's runner can do (no 
 node tests/model-test.js && node tests/i18n.test.cjs
 python3 -I tests/test_logitech_events.py && python3 -I tests/test_logitech_status.py
 python3 -I tests/test_solaar_compat.py        # against the installed Solaar, no hardware access
-python3 -I tests/test_clipboard.py
+python3 -I tests/test_clipboard.py            # stand-ins from foamy-kit's hostenv; suite.sh --ci skips the QML case
 python3 -I tests/runtime.py                   # offscreen on the installed 4.5 shell (needs foamy-kit's harness)
 ```
 
