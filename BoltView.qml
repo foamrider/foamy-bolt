@@ -1,13 +1,11 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
-import Quickshell
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "kit"
 import "Preferences.js" as Schema
-import "Model.js" as Model
 
 // The popup body (built on first open): header, devices, receiver details,
 // footer actions, and the settings page. Data comes in through properties so
