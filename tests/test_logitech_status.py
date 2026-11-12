@@ -133,7 +133,7 @@ class ReceiverQueryTest(unittest.TestCase):
         info = SimpleNamespace(product_id="C548", path="/dev/hidraw-test")
         api = SimpleNamespace(
             base=SimpleNamespace(receivers=lambda: [info]),
-            receiver=SimpleNamespace(create_receiver=lambda b, i: self.fail("must not reopen")),
+            receiver=SimpleNamespace(create_receiver=lambda _base, _info: self.fail("must not reopen")),
         )
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"XDG_RUNTIME_DIR": directory}):
             result = STATUS.snapshot(api, {"/dev/hidraw-test": (Receiver(), Guard())})
@@ -199,7 +199,7 @@ class SolaarApiTest(unittest.TestCase):
                 pass
 
         base = SimpleNamespace(receivers=lambda: [])
-        receiver = SimpleNamespace(create_receiver=lambda low_level, info: None, Receiver=Receiver)
+        receiver = SimpleNamespace(create_receiver=lambda _low_level, _info: None, Receiver=Receiver)
         listener = SimpleNamespace(EventsListener=Listener)
         constants = SimpleNamespace(NotificationFlag=SimpleNamespace(WIRELESS=0x100))
         parts = {"base": base, "receiver": receiver, "listener": listener, "hidpp10_constants": constants}
@@ -217,7 +217,7 @@ class SolaarApiTest(unittest.TestCase):
 
     def test_moved_snapshot_names_are_reported(self):
         with self.assertRaises(STATUS.SolaarUnsupported) as caught:
-            self.load(self.fake(base=SimpleNamespace(), receiver=SimpleNamespace(create_receiver=lambda only: None)))
+            self.load(self.fake(base=SimpleNamespace(), receiver=SimpleNamespace(create_receiver=lambda _only: None)))
         self.assertEqual(caught.exception.missing, ["base.receivers", "receiver.create_receiver(low_level, info)"])
         self.assertIn("missing base.receivers", caught.exception.detail)
 

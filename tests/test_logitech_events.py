@@ -153,7 +153,7 @@ def poll_only_api(receivers=()):
     base = SimpleNamespace(receivers=lambda: list(receivers))
     return SimpleNamespace(
         base=base,
-        receiver=SimpleNamespace(create_receiver=lambda b, i: None),
+        receiver=SimpleNamespace(create_receiver=lambda _base, _info: None),
         version="9.9",
         events=None,
         events_missing=["listener.EventsListener"],
@@ -312,7 +312,7 @@ class HelperTest(unittest.TestCase):
         # later ended the whole helper and the shell crash-looped it with
         # backoff instead of reading on the refresh interval.
         class EventsListener(threading.Thread):  # Solaar's start-up order
-            def __init__(self, receiver, callback):
+            def __init__(self, receiver, _callback):
                 super().__init__(daemon=True)
                 self.receiver = receiver
                 self.active = False
