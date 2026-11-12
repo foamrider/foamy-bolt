@@ -116,12 +116,19 @@ and live in `kit/` as stamped copies: change them in foamy-kit and run its
 `sync.sh`, never edit them here.
 
 ```sh
+mise install                                  # once: the linters and formatters foamy-kit pins
+tests/validate.sh                             # every lint, format and test check below
+tests/validate.sh --ci                        # what GitHub's runner can do (no Quickshell or Omarchy)
+```
+
+`tests/validate.sh` ends with `tests/suite.sh`, which runs these:
+
+```sh
 node tests/model-test.js && node tests/i18n.test.cjs
 python3 -I tests/test_logitech_events.py && python3 -I tests/test_logitech_status.py
 python3 -I tests/test_solaar_compat.py        # against the installed Solaar, no hardware access
 python3 -I tests/test_clipboard.py
 python3 -I tests/runtime.py                   # offscreen on the installed 4.5 shell (needs foamy-kit's harness)
-bash tests/kit-check.sh
 ```
 
 `preview/Preview.qml` holds mock states for foamy-kit's screenshot harness.
