@@ -51,14 +51,18 @@ QtObject {
   readonly property bool running: helper.running
   readonly property bool waiting: restartTimer.running
 
-  onEventErrorChanged: if (eventError) console.warn("foamy.bolt: " + eventError)
-  onEventDetailChanged: if (eventDetail) console.warn("foamy.bolt: " + eventDetail)
+  onEventErrorChanged: if (eventError)
+    console.warn("foamy.bolt: " + eventError)
+  onEventDetailChanged: if (eventDetail)
+    console.warn("foamy.bolt: " + eventDetail)
   onWantedChanged: wanted ? start() : stop()
-  Component.onCompleted: if (wanted) start()
+  Component.onCompleted: if (wanted)
+    start()
   Component.onDestruction: stop()
 
   function start() {
-    if (!wanted || helper.running) return
+    if (!wanted || helper.running)
+      return
     restartTimer.stop()
     helper.command = helperCommand
     errorSnapshotThisRun = false
@@ -68,14 +72,16 @@ QtObject {
     runActive = true
     starts++
     helper.running = true
-    if (runActive) watchdog.restart()
+    if (runActive)
+      watchdog.restart()
   }
 
   function stop() {
     restartTimer.stop()
     watchdog.stop()
     refreshing = false
-    if (!helper.running) return
+    if (!helper.running)
+      return
     stopRequested = true
     helper.running = false
   }
@@ -83,7 +89,8 @@ QtObject {
   // force: the user asked (Refresh, IPC), so a helper waiting out its
   // backoff starts now. Opening the popup only asks a running helper.
   function refresh(force) {
-    if (!wanted) return
+    if (!wanted)
+      return
     if (helper.running) {
       refreshing = true
       helper.write("refresh\n")
@@ -96,11 +103,14 @@ QtObject {
   // stdout arrives in chunks (the helper writes ASCII-only JSON lines), so no
   // more than one bounded partial line is ever kept.
   function handleOutput(data) {
-    if (!runActive || discardOutput) return
+    if (!runActive || discardOutput)
+      return
     var split = Model.splitLines(pendingOutput, data, Model.maxLineLength)
     pendingOutput = split.rest
-    for (var i = 0; i < split.lines.length && !discardOutput; i++) handleLine(split.lines[i])
-    if (split.overflow && !discardOutput) invalidOutput()
+    for (var i = 0; i < split.lines.length && !discardOutput; i++)
+      handleLine(split.lines[i])
+    if (split.overflow && !discardOutput)
+      invalidOutput()
   }
 
   function invalidOutput() {
@@ -113,8 +123,10 @@ QtObject {
   // completes the run; one that is already gone is completed here.
   function abortRun() {
     discardOutput = true
-    if (helper.running) helper.signal(9)
-    else runEnded(-1)
+    if (helper.running)
+      helper.signal(9)
+    else
+      runEnded(-1)
   }
 
   function handleLine(line) {
@@ -145,7 +157,8 @@ QtObject {
   // a process that ran; only running→false for a command that couldn't
   // start. Whichever comes first ends the run, so recovery is scheduled once.
   function runEnded(code) {
-    if (!runActive) return
+    if (!runActive)
+      return
     var requested = stopRequested
     runActive = false
     stopRequested = false
@@ -154,7 +167,8 @@ QtObject {
     watchdog.stop()
     refreshing = false
     lastExitCode = code
-    if (!wanted) return
+    if (!wanted)
+      return
     // Rejoined while stopping: the readings stay; start again from the event
     // loop, as start() from inside exited() would race its runningChanged.
     if (requested) {
@@ -163,7 +177,8 @@ QtObject {
       return
     }
     failures++
-    if (code !== Model.exitUnavailable) eventError = Model.eventError
+    if (code !== Model.exitUnavailable)
+      eventError = Model.eventError
     // Nothing produces readings until the restart: show that instead of stale
     // devices (or an endless "Reading devices…"), unless the helper said why.
     payload = Model.payloadAfterExit(payload, errorSnapshotThisRun)
@@ -174,22 +189,41 @@ QtObject {
   property Process helper: Process {
     stdinEnabled: true
     // Solaar's library imports GTK; the helper never draws, so keep it off the display.
-    environment: ({ WAYLAND_DISPLAY: null, DISPLAY: null })
-    stdout: SplitParser { splitMarker: ""; onRead: function(data) { service.handleOutput(data) } }
+    environment: ({
+        WAYLAND_DISPLAY: null,
+        DISPLAY: null
+      })
+    stdout: SplitParser {
+      splitMarker: ""
+      onRead: function (data) {
+        service.handleOutput(data)
+      }
+    }
     // Solaar logs to stderr. Unread output would stay buffered in the shell
     // for the helper's lifetime, so read and drop it.
-    stderr: SplitParser { splitMarker: ""; onRead: function(data) {} }
-    onExited: function(code) { service.runEnded(code) }
-    onRunningChanged: if (!running) service.runEnded(-1)
+    stderr: SplitParser {
+      splitMarker: ""
+      onRead: function (data) {}
+    }
+    onExited: function (code) {
+      service.runEnded(code)
+    }
+    onRunningChanged: if (!running)
+      service.runEnded(-1)
   }
 
   // Backoff after a run ends: 30 s doubling to 10 min (5 min first when Solaar is missing).
-  property Timer restartTimer: Timer { onTriggered: service.start() }
+  property Timer restartTimer: Timer {
+    onTriggered: service.start()
+  }
 
   // A heartbeat (every 10 s) bounds a stalled helper.
   property Timer watchdog: Timer {
     interval: 45000
-    onTriggered: { service.eventError = Model.eventError; service.abortRun() }
+    onTriggered: {
+      service.eventError = Model.eventError
+      service.abortRun()
+    }
   }
 
   property Timer poll: Timer {

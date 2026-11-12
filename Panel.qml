@@ -37,10 +37,15 @@ Panel {
   readonly property alias prefs: prefs
   readonly property var preferences: prefs.values()
   readonly property alias settingsState: settingsState
-  FoamySettingsState { id: settingsState; panel: root }
+  FoamySettingsState {
+    id: settingsState
+    panel: root
+  }
 
   readonly property var payload: BoltService.payload
-  readonly property var onlineDevices: payload.devices.filter(function(d) { return d.online })
+  readonly property var onlineDevices: payload.devices.filter(function (d) {
+    return d.online
+  })
   readonly property var displayDevices: preferences.showOffline ? payload.devices : onlineDevices
   readonly property var lowestBattery: Model.lowestBattery(payload.devices)
   readonly property bool lowBattery: lowestBattery !== null && lowestBattery < preferences.lowBatteryThreshold
@@ -56,18 +61,39 @@ Panel {
   implicitHeight: button.implicitHeight
 
   // Once per shell: BoltService runs the helper while any instance is a member.
-  FoamyMember { id: member; scope: BoltService.scope; demanding: root.opened }
-  Binding { target: BoltService; property: "refreshSeconds"; value: root.preferences.refreshSeconds; when: member.isLeader }
+  FoamyMember {
+    id: member
+    scope: BoltService.scope
+    demanding: root.opened
+  }
+  Binding {
+    target: BoltService
+    property: "refreshSeconds"
+    value: root.preferences.refreshSeconds
+    when: member.isLeader
+  }
 
   FoamyIpc {
     target: "foamy.bolt"
     enabled: member.isLeader
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function toggle(): void { root.toggle() }
-    function settings(): void { root.openSettings() }
-    function refresh(): void { root.refresh(true) }
-    function status(): string { return JSON.stringify(root.statusObject()) }
+    function open(): void {
+      root.open()
+    }
+    function close(): void {
+      root.close()
+    }
+    function toggle(): void {
+      root.toggle()
+    }
+    function settings(): void {
+      root.openSettings()
+    }
+    function refresh(): void {
+      root.refresh(true)
+    }
+    function status(): string {
+      return JSON.stringify(root.statusObject())
+    }
   }
 
   function statusObject() {
@@ -84,28 +110,46 @@ Panel {
     }
   }
 
-  function refresh(force) { BoltService.refresh(force === true) }
+  function refresh(force) {
+    BoltService.refresh(force === true)
+  }
 
   function openSettings() {
     settingsState.show()
-    Qt.callLater(function() { if (popup.bodyItem && root.editingSettings) popup.bodyItem.focusSettings() })
+    Qt.callLater(function () {
+      if (popup.bodyItem && root.editingSettings)
+        popup.bodyItem.focusSettings()
+    })
   }
   function closeSettings() {
     settingsState.hide()
-    Qt.callLater(function() { if (popup.bodyItem) popup.bodyItem.forceActiveFocus() })
+    Qt.callLater(function () {
+      if (popup.bodyItem)
+        popup.bodyItem.forceActiveFocus()
+    })
   }
-  function save(key, value) { return prefs.save(key, value) }
+  function save(key, value) {
+    return prefs.save(key, value)
+  }
 
   // Device names come from the devices and errors from the helper, and the
   // host's bar tooltip grows to fit any text: cap it (6 lines of 100 characters).
-  function tooltip() { return FoamyText.tooltip(tooltipLine()) }
+  function tooltip() {
+    return FoamyText.tooltip(tooltipLine())
+  }
   function tooltipLine() {
     var brand = FoamyI18n.t("Logitech")
-    if (payload.status === "loading") return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("Reading devices…")])
-    if (degraded) return [brand].concat(payload.errors.map(function(e) { return FoamyI18n.t(e) })).join(" · ")
-    if (!payload.receivers.length) return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No receiver connected")])
-    if (!onlineDevices.length) return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No devices online")])
-    return [brand].concat(onlineDevices.map(function(d) {
+    if (payload.status === "loading")
+      return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("Reading devices…")])
+    if (degraded)
+      return [brand].concat(payload.errors.map(function (e) {
+        return FoamyI18n.t(e)
+      })).join(" · ")
+    if (!payload.receivers.length)
+      return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No receiver connected")])
+    if (!onlineDevices.length)
+      return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No devices online")])
+    return [brand].concat(onlineDevices.map(function (d) {
       var level = Model.battery(d.battery)
       return FoamyI18n.t("%1 %2", [d.name, level === null ? FoamyI18n.t("Battery unavailable") : FoamyI18n.t("%1%", level)])
     })).join(" · ")
@@ -113,7 +157,8 @@ Panel {
 
   function openSolaar() {
     launchError = ""
-    if (solaarCheck.running) return
+    if (solaarCheck.running)
+      return
     solaarCheck.pending = true
     solaarCheck.running = true
   }
@@ -124,19 +169,27 @@ Panel {
     property bool pending: false
     command: ["omarchy-cmd-present", "solaar"]
     function finish(code) {
-      if (!pending) return
+      if (!pending)
+        return
       pending = false
       // uwsm-app gives Solaar its own app scope, as the host launches apps,
       // instead of the compositor service's cgroup.
-      if (code === 0) { Quickshell.execDetached(["uwsm-app", "--", "solaar"]); root.close() }
-      else root.launchError = FoamyI18n.t("Could not start Solaar.")
+      if (code === 0) {
+        Quickshell.execDetached(["uwsm-app", "--", "solaar"])
+        root.close()
+      } else
+        root.launchError = FoamyI18n.t("Could not start Solaar.")
     }
-    onExited: function(code) { finish(code) }
-    onRunningChanged: if (!running) finish(-1)
+    onExited: function (code) {
+      finish(code)
+    }
+    onRunningChanged: if (!running)
+      finish(-1)
   }
 
   // Opening asks the running helper for a fresh reading (settingsState resets on close).
-  onOpenedChanged: if (opened) refresh(false)
+  onOpenedChanged: if (opened)
+    refresh(false)
 
   WidgetButton {
     id: button
@@ -154,10 +207,30 @@ Panel {
       id: barContent
       anchors.centerIn: parent
       spacing: Style.space(4)
-      OpticalGlyph { objectName: "barGlyph"; width: Style.bar.iconCanvas; height: Style.bar.iconCanvas; text: root.barGlyph; fontFamily: button.fontFamily; fontSize: button.fontSize; color: root.lowBattery || root.degraded ? Commons.Color.urgent : root.foreground }
-      Text { visible: root.showPercentage && !root.vertical; anchors.verticalCenter: parent.verticalCenter; text: FoamyI18n.t("%1%", root.lowestBattery); color: root.lowBattery ? Commons.Color.urgent : root.foreground; font.family: button.fontFamily; font.pixelSize: button.fontSize }
+      OpticalGlyph {
+        objectName: "barGlyph"
+        width: Style.bar.iconCanvas
+        height: Style.bar.iconCanvas
+        text: root.barGlyph
+        fontFamily: button.fontFamily
+        fontSize: button.fontSize
+        color: root.lowBattery || root.degraded ? Commons.Color.urgent : root.foreground
+      }
+      Text {
+        visible: root.showPercentage && !root.vertical
+        anchors.verticalCenter: parent.verticalCenter
+        text: FoamyI18n.t("%1%", root.lowestBattery)
+        color: root.lowBattery ? Commons.Color.urgent : root.foreground
+        font.family: button.fontFamily
+        font.pixelSize: button.fontSize
+      }
     }
-    onPressed: function(b) { if (b === Qt.RightButton) root.openSolaar(); else root.toggle() }
+    onPressed: function (b) {
+      if (b === Qt.RightButton)
+        root.openSolaar()
+      else
+        root.toggle()
+    }
   }
 
   FoamyPopup {
@@ -187,9 +260,13 @@ Panel {
         onRefreshRequested: root.refresh(true)
         onSolaarRequested: root.openSolaar()
         onReceiverDetailsToggled: root.receiverDetails = !root.receiverDetails
-        onSaveRequested: function(key, value) { root.save(key, value) }
+        onSaveRequested: function (key, value) {
+          root.save(key, value)
+        }
         onRetryRequested: prefs.retry()
-        onSwitchPanelRequested: function(direction) { root.switchPanel(direction) }
+        onSwitchPanelRequested: function (direction) {
+          root.switchPanel(direction)
+        }
       }
     }
   }

@@ -37,12 +37,36 @@ Rectangle {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     spacing: FoamyStyle.gapLarge
-    FoamyIcon { name: root.icon; color: root.nameColor; Layout.preferredWidth: FoamyStyle.headerIconSize; Layout.preferredHeight: FoamyStyle.headerIconSize; Layout.alignment: Qt.AlignVCenter }
+    FoamyIcon {
+      name: root.icon
+      color: root.nameColor
+      Layout.preferredWidth: FoamyStyle.headerIconSize
+      Layout.preferredHeight: FoamyStyle.headerIconSize
+      Layout.alignment: Qt.AlignVCenter
+    }
     ColumnLayout {
       Layout.fillWidth: true
       spacing: FoamyStyle.gapSmall
-      Text { Layout.fillWidth: true; text: root.device.name; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.nameColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle; elide: Text.ElideRight }
-      Text { Layout.fillWidth: true; text: root.stateText; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.bodySmall; elide: Text.ElideRight }
+      Text {
+        Layout.fillWidth: true
+        text: root.device.name
+        textFormat: Text.PlainText
+        horizontalAlignment: Text.AlignLeft
+        color: root.nameColor
+        font.family: FoamyStyle.fontFamily
+        font.pixelSize: FoamyStyle.font.subtitle
+        elide: Text.ElideRight
+      }
+      Text {
+        Layout.fillWidth: true
+        text: root.stateText
+        textFormat: Text.PlainText
+        horizontalAlignment: Text.AlignLeft
+        color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText
+        font.family: FoamyStyle.fontFamily
+        font.pixelSize: FoamyStyle.font.bodySmall
+        elide: Text.ElideRight
+      }
       Rectangle {
         visible: root.hasBattery
         Layout.fillWidth: true
@@ -50,10 +74,23 @@ Rectangle {
         radius: height / 2
         color: FoamyPalette.divider
         // Anchored, so the fill starts at the reading edge in RTL too.
-        Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width * (root.level || 0) / 100; radius: parent.radius; color: root.levelColor }
+        Rectangle {
+          anchors.left: parent.left
+          anchors.top: parent.top
+          anchors.bottom: parent.bottom
+          width: parent.width * (root.level || 0) / 100
+          radius: parent.radius
+          color: root.levelColor
+        }
       }
     }
-    Text { text: root.reading; textFormat: Text.PlainText; color: root.readingColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle }
+    Text {
+      text: root.reading
+      textFormat: Text.PlainText
+      color: root.readingColor
+      font.family: FoamyStyle.fontFamily
+      font.pixelSize: FoamyStyle.font.subtitle
+    }
   }
 
   Column {
@@ -64,12 +101,50 @@ Rectangle {
     anchors.top: parent.top
     anchors.margins: FoamyStyle.sectionGap
     spacing: FoamyStyle.gap
-    FoamyIcon { name: root.icon; color: root.nameColor; width: FoamyStyle.headerIconSize; height: FoamyStyle.headerIconSize }
-    Text { width: parent.width; text: root.reading; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.readingColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.displayLarge }
+    FoamyIcon {
+      name: root.icon
+      color: root.nameColor
+      width: FoamyStyle.headerIconSize
+      height: FoamyStyle.headerIconSize
+    }
+    Text {
+      width: parent.width
+      text: root.reading
+      textFormat: Text.PlainText
+      horizontalAlignment: Text.AlignLeft
+      color: root.readingColor
+      font.family: FoamyStyle.fontFamily
+      font.pixelSize: FoamyStyle.font.displayLarge
+    }
     // Reserve two name lines so paired tiles keep readings and tracks aligned.
-    FontMetrics { id: nameMetrics; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle }
-    Text { width: parent.width; height: Math.ceil(nameMetrics.height) * 2 + FoamyStyle.gapSmall; text: root.device.name; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.nameColor; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.subtitle; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
-    Text { width: parent.width; text: root.stateText; textFormat: Text.PlainText; horizontalAlignment: Text.AlignLeft; color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText; font.family: FoamyStyle.fontFamily; font.pixelSize: FoamyStyle.font.bodySmall; wrapMode: Text.WordWrap }
+    FontMetrics {
+      id: nameMetrics
+      font.family: FoamyStyle.fontFamily
+      font.pixelSize: FoamyStyle.font.subtitle
+    }
+    Text {
+      width: parent.width
+      height: Math.ceil(nameMetrics.height) * 2 + FoamyStyle.gapSmall
+      text: root.device.name
+      textFormat: Text.PlainText
+      horizontalAlignment: Text.AlignLeft
+      color: root.nameColor
+      font.family: FoamyStyle.fontFamily
+      font.pixelSize: FoamyStyle.font.subtitle
+      wrapMode: Text.WordWrap
+      maximumLineCount: 2
+      elide: Text.ElideRight
+    }
+    Text {
+      width: parent.width
+      text: root.stateText
+      textFormat: Text.PlainText
+      horizontalAlignment: Text.AlignLeft
+      color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText
+      font.family: FoamyStyle.fontFamily
+      font.pixelSize: FoamyStyle.font.bodySmall
+      wrapMode: Text.WordWrap
+    }
     Rectangle {
       width: parent.width
       visible: root.hasBattery
@@ -77,10 +152,23 @@ Rectangle {
       radius: height / 2
       color: FoamyPalette.divider
       // Anchored, so the fill starts at the reading edge in RTL too.
-        Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width * (root.level || 0) / 100; radius: parent.radius; color: root.levelColor }
+      Rectangle {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: parent.width * (root.level || 0) / 100
+        radius: parent.radius
+        color: root.levelColor
+      }
     }
   }
 
-  HoverHandler { id: hover }
-  PanelToolTip { visible: hover.hovered; text: root.device.name + " · " + root.stateText; fontFamily: FoamyStyle.fontFamily }
+  HoverHandler {
+    id: hover
+  }
+  PanelToolTip {
+    visible: hover.hovered
+    text: root.device.name + " · " + root.stateText
+    fontFamily: FoamyStyle.fontFamily
+  }
 }
