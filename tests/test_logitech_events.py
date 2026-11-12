@@ -183,7 +183,19 @@ class HelperTest(unittest.TestCase):
     def start(self, helper):
         thread = threading.Thread(target=lambda: setattr(self, "rc", helper.run()), daemon=True)
         thread.start()
+        # run() returns without joining its query worker (a daemon thread, gone
+        # with the process in real use). A snapshot still running after the test
+        # would create query.lock while the private runtime dir is removed, or
+        # under the real XDG_RUNTIME_DIR once the patch is undone. Cleanups run
+        # last-in first, so this wait comes before both.
+        self.addCleanup(self.wait_idle, helper)
         return thread
+
+    def wait_idle(self, helper):
+        deadline = time.monotonic() + 10
+        while helper.worker.busy and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertFalse(helper.worker.busy, "the query worker finished its snapshot")
 
     def test_snapshot_at_start_and_on_refresh_then_eof_stops(self):
         emitter = FakeEmitter()
