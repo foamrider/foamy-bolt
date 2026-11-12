@@ -66,7 +66,7 @@ ShellRoot {
     }
   }
 
-  // textKey is (text) on 4.0 and (text, modifiers) on 4.5: the kit emits the right one.
+  // Emits PanelKeyCatcher.textKey(text, modifiers) the way the host does.
   FoamyCursor { id: keys }
   function key(view, text) { keys.emitTextKey(view, text, 0) }
   function findByName(item, name) {
