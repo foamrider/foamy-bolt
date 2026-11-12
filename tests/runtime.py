@@ -2,10 +2,11 @@
 """Load Foamy Bolt offscreen on Omarchy 4.5
 with the foamy-kit harness: isolated HOME/XDG/runtime dirs, no Wayland or
 Hyprland, no Solaar or receiver touched (tests/fake_helper.py stands in for the helper). Checks tests/qml/Runtime.qml plus
-`qs ipc call foamy.bolt status` answered by the leader. Omarchy's bin
-directories are dropped from PATH and fakes stand in for omarchy-cmd-present
-and solaar, so no host script or the real Solaar runs; an AppImage's
-LD_LIBRARY_PATH ($APPDIR) is dropped as well.
+`qs ipc call foamy.bolt status` answered by the leader. The harness keeps
+Omarchy's bin directories and an AppImage's libraries out and stubs every
+other omarchy command; fakes stand in for omarchy-cmd-present and solaar,
+so no host script or the real Solaar runs, and a host command the QML
+tried anyway fails the run.
 
 FOAMY_KIT (default ~/GitHub/Personal/foamy-kit) provides the harness.
 The host is Omarchy 4.5: FOAMY_HOST_45, else $OMARCHY_TEST_ROOT/shell, else
@@ -41,30 +42,14 @@ printf 'launched %s\\n' "$*" >> "$FOAMY_BOLT_SOLAAR_LOG"
 """
 
 
-def isolate(env, host, base):
-    """Omarchy's bin directories and an AppImage's libraries out; the fakes first on PATH."""
-    bins = {os.path.realpath("/usr/share/omarchy/bin"), os.path.realpath(Path(host).parent / "bin")}
-    fakes = base / "bin"
-    fakes.mkdir()
-    for name, text in (("omarchy-cmd-present", FAKE_CMD_PRESENT), ("solaar", FAKE_SOLAAR)):
-        (fakes / name).write_text(text)
-        (fakes / name).chmod(0o755)
-    path = [p for p in env.get("PATH", "/usr/bin:/bin").split(":") if p and os.path.realpath(p) not in bins]
-    env["PATH"] = ":".join([str(fakes)] + path)
-    appdir = os.environ.get("APPDIR", "").rstrip("/")
-    env["LD_LIBRARY_PATH"] = ":".join(p for p in env.get("LD_LIBRARY_PATH", "").split(":")
-                                      if p and not (appdir and (p == appdir or p.startswith(appdir + "/"))))
-    env.update(FOAMY_BOLT_CMD_LOG=str(base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(base / "solaar.log"))
-
-
 def ipc_status(run):
+    """The leader's `status` reply over qs IPC, or None."""
+    # FOAMY READY follows every QML step: this waits out the whole scripted run.
+    if not run.wait_for_log("FOAMY READY", timeout=120):
+        return None
     by_id = Path(run.env["XDG_RUNTIME_DIR"]) / "quickshell/by-id"
-    for _ in range(900):  # about 20 s before FOAMY READY, longer on a loaded machine
-        ids = [p.name for p in by_id.iterdir()] if by_id.is_dir() else []
-        if ids and "FOAMY READY" in (run.base / "qs.log").read_text(errors="replace"):
-            break
-        time.sleep(0.1)
-    else:
+    ids = harness.wait_for(lambda: [p.name for p in by_id.iterdir()] if by_id.is_dir() else [], timeout=5)
+    if not ids:
         return None
     result = subprocess.run(["qs", "ipc", "-i", ids[0], "call", "foamy.bolt", "status"], env=run.env,
                             capture_output=True, text=True, timeout=10)
@@ -97,34 +82,33 @@ def run(host, lang):
     # A short prefix: qs's IPC socket sits five levels below this dir, and a
     # unix socket path over 107 bytes fails to bind (no `qs ipc` reply) when
     # TMPDIR is a longer path than /tmp.
-    r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"bolt-{lang}-")
+    r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"bolt-{lang}-",
+                    fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR})
     starts = r.base / "helper-starts"
-    isolate(r.env, harness.HOSTS[host], r.base)
     # DISPLAY is set on purpose: the helper must not receive it.
     r.env.update(FOAMY_LANG=lang, FOAMY_HOLD_MS="3000", DISPLAY=":99",
-                 FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"), FOAMY_BOLT_STARTS=str(starts))
-    log_path = r.base / "qs.log"
-    process = subprocess.Popen(["qs", "-p", str(r.root), "--no-color"], env=r.env, stdout=log_path.open("w"),
-                               stderr=subprocess.STDOUT, start_new_session=True)
+                 FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"), FOAMY_BOLT_STARTS=str(starts),
+                 FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(r.base / "solaar.log"))
+    r.start()
     samples, done = {}, threading.Event()
-    sampler = threading.Thread(target=watch_rss, args=(log_path, process.pid, samples, done), daemon=True)
+    sampler = threading.Thread(target=watch_rss, args=(r.base / "qs.log", r.process.pid, samples, done), daemon=True)
     sampler.start()
     try:
         status = ipc_status(r)
-        process.wait(timeout=120)
+        r.wait(timeout=120)
     finally:
         done.set()
-        if process.poll() is None:
-            process.kill()
+        r.stop()
     sampler.join(timeout=5)
-    log = log_path.read_text(errors="replace")
+    log = r.log
     result = next((line.split("FOAMY RESULT ", 1)[1] for line in log.splitlines() if "FOAMY RESULT" in line), "no result")
-    failures = [line for line in log.splitlines() if "FOAMY FAIL" in line or any(m in line for m in harness.FAILURE_MARKERS)]
+    failures = r.failures()
     try:
         leader = status is not None and json.loads(status).get("leader") is True
     except ValueError:
         leader = False
     helpers = len(starts.read_text().split()) if starts.exists() else 0
+    failures += [f"FOAMY FAIL host command tried: {line}" for line in r.host_commands()]
     for name, expected_text in (("cmd-present.log", "solaar\nsolaar\n"), ("solaar.log", "launched \n")):
         found = (r.base / name).read_text() if (r.base / name).exists() else ""
         if found != expected_text:

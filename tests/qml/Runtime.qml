@@ -83,32 +83,19 @@ ShellRoot {
     for (var i = 0; i < panels.count; i++) if (panels.itemAt(i).statusObject().leader) count++
     return count
   }
-  function after(ms, fn) {
-    var timer = Qt.createQmlObject('import QtQuick; Timer { }', shell)
-    timer.interval = ms
-    timer.triggered.connect(function() { timer.destroy(); fn() })
-    timer.start()
-  }
-  // Calls fn once ready() holds, or after timeoutMs (the step's checks then
-  // fail). For steps whose length depends on machine load, where a fixed
-  // delay is either too short on a busy machine or wastes time.
-  function waitFor(ready, timeoutMs, fn) {
-    var deadline = Date.now() + timeoutMs
-    var timer = Qt.createQmlObject('import QtQuick; Timer { interval: 50; repeat: true }', shell)
-    timer.triggered.connect(function() {
-      if (!ready() && Date.now() < deadline) return
-      timer.stop()
-      timer.destroy()
-      fn()
-    })
-    timer.start()
+  // Each step waits for the state it checks (kit harness FoamyWait), never a
+  // fixed delay: a timeout logs FOAMY FAIL with the label and the step's
+  // checks then report what is missing.
+  FoamyWait { id: wait }
+  function waitFor(ready, label, fn) {
+    wait.waitFor(ready, 30000, function() { fn() }, label)
   }
 
   Component.onCompleted: {
     eq(Bolt.BoltService.running, false, "no helper before any bar instance")
     Bolt.BoltService.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
     panels.model = 3
-    after(1500, stepOne)
+    waitFor(function() { return leaders() === 1 && Bolt.BoltService.members === 3 && Bolt.BoltService.payload.status === "ok" }, "the helper's first snapshot", stepOne)
   }
 
   function stepOne() {
@@ -129,7 +116,7 @@ ShellRoot {
     check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
     eq(first.popup.bodyItem, null, "popup body is lazy")
     first.open()
-    after(700, stepTwo)
+    waitFor(function() { return first.popup.bodyItem !== null }, "the popup body is built", stepTwo)
   }
 
   function stepTwo() {
@@ -175,7 +162,7 @@ ShellRoot {
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
     first.close()
-    after(800, stepThree)
+    waitFor(function() { var p = Bolt.BoltService.payload; return !Bolt.BoltService.refreshing && p.receivers.length > 0 && p.receivers[0].productId === "N2" }, "both refreshes are answered", stepThree)
   }
 
   function stepThree() {
@@ -192,7 +179,7 @@ ShellRoot {
     first.close()
     eq(first.editingSettings, false, "Settings resets on close")
     service.helper.signal(15)
-    after(700, stepFour)
+    waitFor(function() { return !service.runActive && service.waiting }, "the terminated helper's run ends", stepFour)
   }
 
   function stepFour() {
@@ -206,7 +193,7 @@ ShellRoot {
     eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
     eq(panels.itemAt(0).degraded, true, "bar shows the degraded state")
     panels.itemAt(1).refresh(true)
-    after(900, stepFive)
+    waitFor(function() { return service.starts === 2 && service.failures === 0 && service.payload.status === "ok" }, "Refresh restarts the helper", stepFive)
   }
 
   function stepFive() {
@@ -216,7 +203,7 @@ ShellRoot {
     eq(service.failures, 0, "a good snapshot resets the backoff")
     eq(service.payload.status, "ok", "readings back after the restart")
     service.helper.write("fail\n")
-    after(700, stepFiveB)
+    waitFor(function() { return !service.runActive }, "the failing helper's run ends", stepFiveB)
   }
 
   function stepFiveB() {
@@ -224,7 +211,7 @@ ShellRoot {
     eq(service.running, false, "helper failed")
     eq(service.payload.errors[0], "Device query timed out. Try Refresh.", "its own error snapshot is kept")
     panels.itemAt(0).refresh(true)
-    after(900, function() {
+    waitFor(function() { return Bolt.BoltService.starts === 3 && Bolt.BoltService.payload.status === "ok" }, "Refresh restarts it again", function() {
       eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
       eq(Bolt.BoltService.payload.status, "ok", "readings back")
       stepCantStart()
@@ -239,11 +226,11 @@ ShellRoot {
     var startsBefore = service.starts
     service.helperCommand = ["/nonexistent/foamy-bolt-helper"]
     service.helper.signal(15)
-    after(700, function() {
+    waitFor(function() { return !service.runActive && service.waiting }, "the exit schedules a restart", function() {
       // That exit scheduled a restart; take it now with the broken command.
       eq(service.waiting, true, "restart scheduled after the exit")
       service.restartTimer.interval = 50
-      after(700, function() {
+      waitFor(function() { return service.starts === startsBefore + 1 && !service.runActive }, "the broken command's run ends", function() {
         eq(service.starts, startsBefore + 1, "scheduled restart tried the broken command")
         eq(service.running, false, "command that can't start isn't running")
         eq(service.runActive, false, "its run is over")
@@ -259,7 +246,7 @@ ShellRoot {
         eq(service.restartTimer.interval, 60000, "and keeps the backoff")
         service.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
         service.restartTimer.interval = 50
-        after(900, function() {
+        waitFor(function() { return service.starts === startsBefore + 2 && service.payload.status === "ok" }, "readings after a failed start", function() {
           eq(service.starts, startsBefore + 2, "scheduled restart after a failed start")
           eq(service.running, true, "helper running after a failed start")
           eq(service.payload.status, "ok", "readings back after a failed start")
@@ -278,7 +265,7 @@ ShellRoot {
     service.watchdog.interval = 400
     service.watchdog.restart()
     service.helper.write("hang\n")
-    after(1200, function() {
+    waitFor(function() { return !service.runActive }, "the watchdog ends the stalled run", function() {
       eq(service.running, false, "watchdog killed the stalled helper")
       eq(service.lastExitCode, 9, "with SIGKILL")
       eq(service.failures, 1, "stall counted once")
@@ -288,7 +275,7 @@ ShellRoot {
       eq(service.payload.status, "error", "stalled helper shows as an error")
       service.watchdog.interval = 45000
       service.restartTimer.interval = 50
-      after(900, function() {
+      waitFor(function() { return service.starts === startsBefore + 1 && service.payload.status === "ok" }, "readings after a stall", function() {
         eq(service.starts, startsBefore + 1, "scheduled restart after a stall")
         eq(service.payload.status, "ok", "readings back after a stall")
         stepFlood()
@@ -303,30 +290,30 @@ ShellRoot {
     var startsBefore = service.starts
     check(service.helper.stderr !== null, "helper stderr is read, not buffered")
     service.helper.write("flood\n")
-    after(1500, function() {
+    waitFor(function() { return !service.runActive }, "the flooding run ends", function() {
       eq(service.running, false, "endless line ends the helper")
       eq(service.pendingOutput, "", "no partial line kept")
       eq(service.failures, 1, "flood counted once")
       eq(service.waiting, true, "flood schedules a restart")
       service.restartTimer.interval = 50
-      after(900, function() {
+      waitFor(function() { return service.starts === startsBefore + 1 && service.payload.status === "ok" }, "readings after a flood", function() {
         eq(service.starts, startsBefore + 1, "scheduled restart after a flood")
         eq(service.payload.status, "ok", "readings back after a flood")
-        // tests/runtime.py samples the shell's memory at START and END.
+        // tests/runtime.py samples the shell's memory at START and END. It
+        // polls the log every 50 ms; this gap lets it take START before the
+        // noise. A late START only shrinks the measured growth.
         console.log("FOAMY STDERR START")
-        after(1000, function() { service.helper.write("stderr\nrefresh\n") })
+        wait.after(1000, function() { service.helper.write("stderr\nrefresh\n") })
         // The reply follows 128 MiB of stderr the shell has to read first:
         // seconds on a loaded machine.
-        waitFor(function() { return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1" }, 30000, function() {
+        waitFor(function() { return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1" }, "the reply after 128 MiB of stderr", function() {
           console.log("FOAMY STDERR END")
           eq(service.running, true, "stderr noise doesn't stop the helper")
           eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
-          after(600, function() {
-            checkScroll()
-            stepSolaar(function() {
-              panels.model = 0
-              after(700, stepSix)
-            })
+          checkScroll()
+          stepSolaar(function() {
+            panels.model = 0
+            waitFor(function() { return service.members === 0 && !service.running }, "the helper stops with the last bar", stepSix)
           })
         })
       })
@@ -409,12 +396,12 @@ ShellRoot {
     var first = panels.itemAt(0)
     first.open()
     first.openSolaar()
-    waitFor(function() { return first.launchError !== "" }, 10000, function() {
+    waitFor(function() { return first.launchError !== "" }, "the missing-Solaar error", function() {
       eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "missing Solaar explained")
       eq(first.opened, true, "the popup stays open")
       first.openSolaar()
       eq(first.launchError, "", "a new check clears the error")
-      waitFor(function() { return !first.opened }, 10000, function() {
+      waitFor(function() { return !first.opened }, "Solaar opens and the popup closes", function() {
         eq(first.opened, false, "Solaar found: the popup closes")
         eq(first.launchError, "", "and no error")
         next()
@@ -428,7 +415,8 @@ ShellRoot {
     eq(service.running, false, "helper stops with the last bar instance")
     eq(service.waiting, false, "no restart pending")
     panels.model = 3
-    after(1200, function() {
+    // The new run's first snapshot is N0 (the stopped run's N1 stays until then).
+    waitFor(function() { var p = Bolt.BoltService.payload; return Bolt.BoltService.running && leaders() === 1 && p.receivers.length > 0 && p.receivers[0].productId === "N0" }, "the helper starts with the bars again", function() {
       eq(Bolt.BoltService.starts, 8, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
       stepRejoin()
@@ -448,11 +436,12 @@ ShellRoot {
       service.wantedChanged.disconnect(rejoin)
       Qt.callLater(function() { state.exiting = service.running; panels.model = 3 })
     }
-    service.helper.write("slowstop\n")
-    after(300, function() {
+    // The refresh reply (N1) proves the fake has read "slowstop": it handles stdin in order.
+    service.helper.write("slowstop\nrefresh\n")
+    waitFor(function() { return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "N1" }, "the fake has its slow SIGTERM", function() {
       service.wantedChanged.connect(rejoin)
       panels.model = 0
-      after(2000, function() {
+      waitFor(function() { return state.rejoined && service.running && service.starts === startsBefore + 1 && service.payload.status === "ok" }, "the bars that came back get a helper", function() {
         check(state.rejoined, "the last bar left")
         eq(state.exiting, true, "new bars joined while the stopped helper was exiting")
         eq(service.members, 3, "three members again")
