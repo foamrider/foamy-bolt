@@ -1,0 +1,78 @@
+# qmllint findings accepted when the check was adopted. tests/validate.sh fails on any
+# finding not listed here. Regenerate with `tests/validate.sh --update-baseline qmllint`
+# only to drop fixed entries or after reviewing every added one; never to pass a check.
+BoltService.qml: block-scope-var-declaration: var declaration in block scope is hoisted to function scope | for (var i = 0; i < split.lines.length && !discardOutput; i++)
+BoltService.qml: import: Type BoltService not declared as singleton in qmldir but using pragma Singleton
+BoltService.qml: incompatible-type: Cannot assign binding of type QVariantMap to QVariantHash | environment: ({
+BoltView.qml: block-scope-var-declaration: var declaration in block scope is hoisted to function scope | for (var i = 0; i < Schema.fields.length; i++) {
+BoltView.qml: block-scope-var-declaration: var declaration in block scope is hoisted to function scope | var field = Schema.fields[i]
+BoltView.qml: missing-property: Member "body" not found on type "QObject" | font.pixelSize: FoamyStyle.font.body
+BoltView.qml: missing-property: Member "body" not found on type "QObject" | font.pixelSize: FoamyStyle.font.body
+BoltView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
+BoltView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
+BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
+BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
+BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
+BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
+BoltView.qml: unqualified: Unqualified access | threshold: root.setting("lowBatteryThreshold")
+BoltView.qml: unqualified: Unqualified access | tile: root.layout === "tiles"
+DeviceView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
+DeviceView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
+DeviceView.qml: missing-property: Member "displayLarge" not found on type "QObject" | font.pixelSize: FoamyStyle.font.displayLarge
+DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
+DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
+DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
+DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
+Panel.qml: id-shadows-member: Id for object FoamyMember shadows property "member". Rename one or the other. | leader: member.isLeader,
+Panel.qml: id-shadows-member: Id for object FoamyPopup shadows property "popup". Rename one or the other. | if (popup.bodyItem && root.editingSettings)
+Panel.qml: id-shadows-member: Id for object FoamyPrefsQueue shadows property "prefs". Rename one or the other. | readonly property var preferences: prefs.values()
+Panel.qml: id-shadows-member: Id for object FoamySettingsState shadows property "settingsState". Rename one or the other. | readonly property bool editingSettings: settingsState.editing
+Panel.qml: id-shadows-member: Note: Id defined here | id: member
+Panel.qml: id-shadows-member: Note: Id defined here | id: popup
+Panel.qml: id-shadows-member: Note: Id defined here | id: prefs
+Panel.qml: id-shadows-member: Note: Id defined here | id: settingsState
+Panel.qml: missing-property: Member "barForeground" not found on type "QObject" | readonly property color foreground: bar ? bar.barForeground : Commons.Color.foreground
+Panel.qml: missing-property: Member "focusSettings" not found on type "QQuickItem" | popup.bodyItem.focusSettings()
+Panel.qml: missing-property: Member "iconCanvas" not found on type "QObject" | fixedWidth: root.vertical ? -1 : Math.max(Style.bar.iconSlot, barContent.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas)
+Panel.qml: missing-property: Member "iconCanvas" not found on type "QObject" | height: Style.bar.iconCanvas
+Panel.qml: missing-property: Member "iconCanvas" not found on type "QObject" | width: Style.bar.iconCanvas
+Panel.qml: missing-property: Member "iconSlot" not found on type "QObject" | fixedWidth: root.vertical ? -1 : Math.max(Style.bar.iconSlot, barContent.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas)
+Panel.qml: missing-property: Member "iconSlot" not found on type "QObject" | fixedWidth: root.vertical ? -1 : Math.max(Style.bar.iconSlot, barContent.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas)
+Panel.qml: missing-property: Member "position" not found on type "QObject" | readonly property bool vertical: bar && (bar.position === "left" || bar.position === "right")
+Panel.qml: missing-property: Member "position" not found on type "QObject" | readonly property bool vertical: bar && (bar.position === "left" || bar.position === "right")
+Panel.qml: unqualified: Unqualified access | devices: root.displayDevices
+Panel.qml: unqualified: Unqualified access | editingSettings: root.editingSettings
+Panel.qml: unqualified: Unqualified access | launchError: root.launchError
+Panel.qml: unqualified: Unqualified access | onCloseRequestedByView: root.editingSettings ? root.closeSettings() : root.close()
+Panel.qml: unqualified: Unqualified access | onCloseRequestedByView: root.editingSettings ? root.closeSettings() : root.close()
+Panel.qml: unqualified: Unqualified access | onCloseRequestedByView: root.editingSettings ? root.closeSettings() : root.close()
+Panel.qml: unqualified: Unqualified access | onReceiverDetailsToggled: root.receiverDetails = !root.receiverDetails
+Panel.qml: unqualified: Unqualified access | onReceiverDetailsToggled: root.receiverDetails = !root.receiverDetails
+Panel.qml: unqualified: Unqualified access | onRefreshRequested: root.refresh(true)
+Panel.qml: unqualified: Unqualified access | onRetryRequested: prefs.retry()
+Panel.qml: unqualified: Unqualified access | onSettingsClosed: root.closeSettings()
+Panel.qml: unqualified: Unqualified access | onSettingsRequested: root.openSettings()
+Panel.qml: unqualified: Unqualified access | onSolaarRequested: root.openSolaar()
+Panel.qml: unqualified: Unqualified access | onlineCount: root.onlineDevices.length
+Panel.qml: unqualified: Unqualified access | payload: root.payload
+Panel.qml: unqualified: Unqualified access | receiverDetails: root.receiverDetails
+Panel.qml: unqualified: Unqualified access | retryable: prefs.canRetry
+Panel.qml: unqualified: Unqualified access | root.save(key, value)
+Panel.qml: unqualified: Unqualified access | root.switchPanel(direction)
+Panel.qml: unqualified: Unqualified access | saving: prefs.busy
+Panel.qml: unqualified: Unqualified access | settings: root.preferences
+Panel.qml: unqualified: Unqualified access | settingsError: prefs.error ? FoamyI18n.t(prefs.error) : ""
+Panel.qml: unqualified: Unqualified access | settingsError: prefs.error ? FoamyI18n.t(prefs.error) : ""
+Panel.qml: unqualified: Unqualified access | shown: root.opened
+preview/Preview.qml: id-shadows-member: Id for object FoamyPopup shadows property "popup". Rename one or the other. | readonly property Item popup: popup
+preview/Preview.qml: id-shadows-member: Note: Id defined here | id: popup
+preview/Preview.qml: incompatible-type: Cannot assign binding of type FoamyPopup to QQuickItem | readonly property Item popup: popup
+preview/Preview.qml: unqualified: Unqualified access | devices: preview.payload.devices
+preview/Preview.qml: unqualified: Unqualified access | editingSettings: preview.previewState === "settings"
+preview/Preview.qml: unqualified: Unqualified access | layout: preview.previewState === "tiles" || preview.overflow ? "tiles" : "list",
+preview/Preview.qml: unqualified: Unqualified access | layout: preview.previewState === "tiles" || preview.overflow ? "tiles" : "list",
+preview/Preview.qml: unqualified: Unqualified access | onTriggered: if (preview.previewState === "overflow-end" && view.cursorKey !== "refresh")
+preview/Preview.qml: unqualified: Unqualified access | onlineCount: preview.payload.devices.length
+preview/Preview.qml: unqualified: Unqualified access | payload: preview.payload
+preview/Preview.qml: unqualified: Unqualified access | receiverDetails: preview.previewState === "list"
+preview/Preview.qml: unqualified: Unqualified access | target: preview

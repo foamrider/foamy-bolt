@@ -1,0 +1,5 @@
+# ruff findings accepted when the check was adopted. tests/validate.sh fails on any
+# finding not listed here. Regenerate with `tests/validate.sh --update-baseline ruff`
+# only to drop fixed entries or after reviewing every added one; never to pass a check.
+logitech_events.py: C901: `run` is too complex (> 15) | def run(self) -> int: [17]
+logitech_status.py: C901: `load_api` is too complex (> 15) | def load_api() -> SimpleNamespace: [16]
