@@ -75,11 +75,14 @@ on for Solaar.
 - The helper is Python on purpose, unlike the Rust helpers in other Foamy
   plugins: Solaar's receiver library carries years of device quirks, and
   foamy-bolt uses it rather than its own copy of the protocol.
-- Hardware queries from foamy-bolt processes are serialized with a lock in
-  `$XDG_RUNTIME_DIR/foamy-bolt/`. Solaar's own GUI can run at the same time,
-  but it doesn't take that lock, and both send Solaar's fixed software ID
-  (0x0B), so their replies aren't kept apart: the same request sent by both
-  at the same moment can be answered to either.
+- Snapshot queries (the battery and device readings) from foamy-bolt
+  processes are serialized with a lock in `$XDG_RUNTIME_DIR/foamy-bolt/`.
+  The event listener's own requests, which turn on connection notifications
+  and look up a device feature after a notification, don't take that lock.
+  Solaar's own GUI can run at the same time, but it doesn't take the lock
+  either, and every one of them sends Solaar's fixed software ID (0x0B), so
+  their replies aren't kept apart: the same request sent by two of them at
+  the same moment can be answered to either.
 - Solaar has no stable Python API. The helper checks every Solaar name it uses
   when it starts. If the event API moved, readings continue on the refresh
   interval and the shell log says which names are missing. If the reading API
