@@ -133,26 +133,28 @@ Panel {
   }
 
   // Device names come from the devices and errors from the helper, and the
-  // host's bar tooltip grows to fit any text: cap it (6 lines of 100 characters).
+  // host's bar tooltip grows to fit any text: cap it at 6 lines of 100
+  // characters. With one entry per line that is the heading and 5 entries;
+  // past that the last line ends in "…".
   function tooltip() {
-    return FoamyText.tooltip(tooltipLine())
+    return FoamyText.tooltip(fullTooltip())
   }
-  function tooltipLine() {
+  function fullTooltip() {
     var brand = FoamyI18n.t("Logitech")
     if (payload.status === "loading")
       return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("Reading devices…")])
     if (degraded)
-      return [brand].concat(payload.errors.map(function (e) {
+      return Model.tooltipText(brand, payload.errors.map(function (e) {
         return FoamyI18n.t(e)
-      })).join(" · ")
+      }))
     if (!payload.receivers.length)
       return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No receiver connected")])
     if (!onlineDevices.length)
       return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("No devices online")])
-    return [brand].concat(onlineDevices.map(function (d) {
+    return Model.tooltipText(brand, onlineDevices.map(function (d) {
       var level = Model.battery(d.battery)
       return FoamyI18n.t("%1 %2", [d.name, level === null ? FoamyI18n.t("Battery unavailable") : FoamyI18n.t("%1%", level)])
-    })).join(" · ")
+    }))
   }
 
   function openSolaar() {

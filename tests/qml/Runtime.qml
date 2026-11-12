@@ -415,12 +415,54 @@ ShellRoot {
 
   // The bar tooltip carries device names and helper errors, and the host's
   // tooltip has no size limit of its own: kit FoamyText caps it at 6 lines of
-  // 100 characters. A normal reading is unchanged.
+  // 100 characters. One device per line under the "Logitech" heading, so five
+  // devices fit, a long name is cut on its own line, and more devices than
+  // fit end in a visible "…".
   function tooltipChecks(first) {
     var service = Bolt.BoltService
     if (shell.lang === "en")
-      eq(first.tooltip(), "Logitech · MX Master 3S 12% · MX Keys S 64%", "the usual tooltip is unchanged")
+      eq(first.tooltip(), "Logitech\nMX Master 3S 12%\nMX Keys S 64%", "one online device per line under the heading")
     var kept = service.payload
+    function devices(names) {
+      return names.map(function (name, i) {
+        return {
+          name: name,
+          online: true,
+          battery: 10 * (i + 1),
+          charging: false
+        }
+      })
+    }
+    function reading(names) {
+      service.payload = ({
+          status: "ok",
+          receivers: [
+            {
+              name: "Bolt Receiver",
+              productId: "C548"
+            }
+          ],
+          errors: [],
+          devices: devices(names)
+        })
+      return first.tooltip().split("\n")
+    }
+    function line(name, i) {
+      return FoamyI18n.t("%1 %2", [name, FoamyI18n.t("%1%", 10 * (i + 1))])
+    }
+    var five = ["MX Master 3S", "MX Keys S", "MX Anywhere 3S", "MX Mechanical Mini", "Lift Vertical Ergonomic Mouse"]
+    eq(JSON.stringify(reading(five)), JSON.stringify([FoamyI18n.t("Logitech")].concat(five.map(line))), "five devices all show, one per line")
+    var cut = reading(["MX Master 3S", "N".repeat(300), "MX Keys S"])
+    eq(cut.length, 4, "a long name keeps its own line")
+    var long = cut[2] || ""
+    check(Array.from(long).length === 100 && long.slice(-1) === "…", "a long name is cut with …: " + long.length)
+    eq(cut[3], line("MX Keys S", 2), "the next device still shows in full")
+    eq(reading(["MX Master 3S", "Two\nlines"])[2], line("Two lines", 1), "a name with a line break stays on one line")
+    var eight = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]
+    var more = reading(eight)
+    eq(more.length, 6, "more devices than fit: six lines")
+    eq(more[5], line("D5", 4) + "…", "and the last one says the list goes on")
+    check(more.indexOf(line("D6", 5)) < 0, "devices past the cap are not shown as if complete")
     function bounded(label) {
       var lines = first.tooltip().split("\n")
       check(lines.length <= 6 && lines.every(function (line) {
@@ -429,7 +471,7 @@ ShellRoot {
         return line.length
       })))
     }
-    var long = "x".repeat(5000)
+    long = "x".repeat(5000)
     var lines = Array(50).fill("Device").join("\n")
     service.payload = ({
         status: "ok",

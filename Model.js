@@ -61,6 +61,13 @@ function restartDelay(failures,exitCode) {
   var first=exitCode===exitUnavailable ? 300000 : 30000
   return Math.min(600000,first*Math.pow(2,Math.max(0,failures-1)))
 }
+// The bar tooltip: the heading, then one entry (a device or an error) per
+// line. A line break inside an entry (a device name comes from the device)
+// becomes a space, so each entry stays one line and the line count says how
+// many there are. Panel caps the result with kit FoamyText.tooltip().
+function tooltipText(heading,entries) {
+  return [heading].concat(entries.map(function(entry) { return String(entry).replace(/[\r\n\u2028\u2029]+/g," ") })).join("\n")
+}
 // Longest helper stdout line kept (a status line is a few KiB).
 var maxLineLength=262144
 // Splits a stdout chunk onto the unterminated rest of the previous ones.
@@ -72,4 +79,4 @@ function splitLines(rest,chunk,limit) {
   for (var i=0;i<lines.length && !overflow;i++) if (lines[i].length>limit) overflow=true
   return overflow ? {lines:[],rest:"",overflow:true} : {lines:lines,rest:tail,overflow:false}
 }
-if (typeof module !== "undefined") module.exports={splitLines:splitLines,maxLineLength:maxLineLength,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}
+if (typeof module !== "undefined") module.exports={splitLines:splitLines,tooltipText:tooltipText,maxLineLength:maxLineLength,battery:battery,lowestBattery:lowestBattery,parsePayload:parsePayload,parseEvent:parseEvent,eventError:eventError,restartDelay:restartDelay,exitUnavailable:exitUnavailable,loadingPayload:loadingPayload,errorPayload:errorPayload,payloadAfterExit:payloadAfterExit,helperStoppedError:helperStoppedError}
