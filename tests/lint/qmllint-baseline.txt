@@ -64,9 +64,6 @@ Panel.qml: unqualified: Unqualified access | settings: root.preferences
 Panel.qml: unqualified: Unqualified access | settingsError: prefs.error ? FoamyI18n.t(prefs.error) : ""
 Panel.qml: unqualified: Unqualified access | settingsError: prefs.error ? FoamyI18n.t(prefs.error) : ""
 Panel.qml: unqualified: Unqualified access | shown: root.opened
-preview/Preview.qml: id-shadows-member: Id for object FoamyPopup shadows property "popup". Rename one or the other. | readonly property Item popup: popup
-preview/Preview.qml: id-shadows-member: Note: Id defined here | id: popup
-preview/Preview.qml: incompatible-type: Cannot assign binding of type FoamyPopup to QQuickItem | readonly property Item popup: popup
 preview/Preview.qml: unqualified: Unqualified access | devices: preview.payload.devices
 preview/Preview.qml: unqualified: Unqualified access | editingSettings: preview.previewState === "settings"
 preview/Preview.qml: unqualified: Unqualified access | layout: preview.previewState === "tiles" || preview.overflow ? "tiles" : "list",

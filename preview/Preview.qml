@@ -10,7 +10,7 @@ Item {
   required property Item anchorItem
   property var previewStates: ["list", "tiles", "empty", "error", "settings", "stopped", "overflow", "overflow-end"]
   property string previewState: "list"
-  readonly property Item popup: popup
+  readonly property var popup: previewPopup
 
   readonly property var receivers: [
     {
@@ -94,7 +94,7 @@ Item {
   }
 
   FoamyPopup {
-    id: popup
+    id: previewPopup
     anchorItem: preview.anchorItem
     bar: preview.bar
     open: true
