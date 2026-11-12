@@ -140,8 +140,7 @@ def load_api() -> SimpleNamespace:
             events_missing.append("hidpp10_constants.NotificationFlag.WIRELESS")
         if not events_missing:
             events = SimpleNamespace(listener=events_class, wireless=flag)
-    return SimpleNamespace(base=base, receiver=receiver, version=version,
-                           events=events, events_missing=events_missing)
+    return SimpleNamespace(base=base, receiver=receiver, version=version, events=events, events_missing=events_missing)
 
 
 def battery_percent(battery: Any) -> int | None:

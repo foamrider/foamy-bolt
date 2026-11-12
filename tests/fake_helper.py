@@ -7,6 +7,7 @@ line; `stderr` writes 128 MiB of log noise to stderr; `slowstop` makes SIGTERM
 take half a second, as the real helper's listener shutdown can. The receiver's productId
 counts `refresh` commands and its name says whether DISPLAY/WAYLAND_DISPLAY
 reached the helper."""
+
 import json
 import os
 import signal
@@ -21,12 +22,31 @@ display = "display:set" if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_
 
 def status(count):
     devices = [
-        {"name": "MX Master 3S", "kind": "mouse", "kindIcon": "mouse", "online": True, "battery": 12, "charging": False},
-        {"name": "MX Keys S", "kind": "keyboard", "kindIcon": "keyboard", "online": True, "battery": 64, "charging": True},
+        {
+            "name": "MX Master 3S",
+            "kind": "mouse",
+            "kindIcon": "mouse",
+            "online": True,
+            "battery": 12,
+            "charging": False,
+        },
+        {
+            "name": "MX Keys S",
+            "kind": "keyboard",
+            "kindIcon": "keyboard",
+            "online": True,
+            "battery": 64,
+            "charging": True,
+        },
         {"name": "G435", "kind": "headset", "kindIcon": "headset", "online": False, "battery": None, "charging": False},
     ]
-    payload = {"status": "ok", "updatedAt": int(time.time()), "receivers": [{"name": display, "productId": f"N{count}"}],
-               "devices": devices, "errors": []}
+    payload = {
+        "status": "ok",
+        "updatedAt": int(time.time()),
+        "receivers": [{"name": display, "productId": f"N{count}"}],
+        "devices": devices,
+        "errors": [],
+    }
     print(json.dumps({"event": "status", "payload": payload}), flush=True)
 
 
@@ -38,8 +58,13 @@ for line in sys.stdin:
         count += 1
         status(count)
     elif line.strip() == "fail":  # test hook: an error snapshot, then a crash
-        error = {"status": "error", "updatedAt": int(time.time()), "receivers": [], "devices": [],
-                 "errors": ["Device query timed out. Try Refresh."]}
+        error = {
+            "status": "error",
+            "updatedAt": int(time.time()),
+            "receivers": [],
+            "devices": [],
+            "errors": ["Device query timed out. Try Refresh."],
+        }
         print(json.dumps({"event": "status", "payload": error}), flush=True)
         sys.exit(1)
     elif line.strip() == "hang":  # test hook: alive but silent, until killed

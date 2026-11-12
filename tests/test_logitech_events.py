@@ -24,15 +24,15 @@ STATUS = EVENTS.STATUS
 class EventFilterTest(unittest.TestCase):
     def setUp(self):
         self.device = SimpleNamespace(
-            online=False, protocol=2.0,
+            online=False,
+            protocol=2.0,
             features=SimpleNamespace(get_feature=Mock(return_value=0x1004)),
             close=Mock(),
         )
         self.receiver = SimpleNamespace(_devices={1: self.device})
 
     def event(self, sub_id, address=0, report_id=0x11, devnumber=1, data=b"\x32\x9f\x40"):
-        return SimpleNamespace(sub_id=sub_id, address=address,
-                               report_id=report_id, devnumber=devnumber, data=data)
+        return SimpleNamespace(sub_id=sub_id, address=address, report_id=report_id, devnumber=devnumber, data=data)
 
     def test_connection_and_power_events_do_not_query_hardware(self):
         for sub_id in EVENTS.CONNECTION_EVENTS:
@@ -61,8 +61,12 @@ class EventFilterTest(unittest.TestCase):
         self.assertIs(self.receiver._devices[1], self.device)
 
     def test_input_and_receiver_messages_do_not_refresh(self):
-        for event in [self.event(0x49), self.event(1, report_id=0x20),
-                      self.event(0x4A), self.event(0x41, devnumber=0xFF)]:
+        for event in [
+            self.event(0x49),
+            self.event(1, report_id=0x20),
+            self.event(0x4A),
+            self.event(0x41, devnumber=0xFF),
+        ]:
             self.assertFalse(EVENTS.status_notification(event, self.receiver))
         self.device.features.get_feature.assert_not_called()
 
@@ -147,8 +151,13 @@ class FakeEmitter:
 
 def poll_only_api(receivers=()):
     base = SimpleNamespace(receivers=lambda: list(receivers))
-    return SimpleNamespace(base=base, receiver=SimpleNamespace(create_receiver=lambda b, i: None),
-                           version="9.9", events=None, events_missing=["listener.EventsListener"])
+    return SimpleNamespace(
+        base=base,
+        receiver=SimpleNamespace(create_receiver=lambda b, i: None),
+        version="9.9",
+        events=None,
+        events_missing=["listener.EventsListener"],
+    )
 
 
 class EmitterTest(unittest.TestCase):
@@ -184,7 +193,8 @@ class HelperTest(unittest.TestCase):
         thread = self.start(helper)
         self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
         self.assertEqual(emitter.statuses()[0]["payload"]["status"], "absent")
-        commands.write("refresh\nignored\n"); commands.flush()
+        commands.write("refresh\nignored\n")
+        commands.flush()
         self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
         commands.close()  # the shell went away
         thread.join(5)
@@ -199,7 +209,8 @@ class HelperTest(unittest.TestCase):
         health = next(x for x in emitter.events if x["event"] == "health")
         self.assertEqual(health["error"], EVENTS.WATCH_ERROR)
         self.assertEqual(health["detail"], "Solaar 9.9: missing listener.EventsListener")
-        helper.stop(); thread.join(5)
+        helper.stop()
+        thread.join(5)
         self.assertEqual(self.rc, 0)
 
     def test_change_bursts_are_coalesced_into_one_snapshot(self):
@@ -212,30 +223,35 @@ class HelperTest(unittest.TestCase):
         self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
         time.sleep(EVENTS.DEBOUNCE * 3)
         self.assertEqual(len(emitter.statuses()), 2)
-        helper.stop(); thread.join(5)
+        helper.stop()
+        thread.join(5)
 
     def test_refresh_during_a_query_runs_once_more_afterwards(self):
         emitter = FakeEmitter()
         gate = threading.Event()
         querying = threading.Event()
         calls = []
+
         def receivers():
             calls.append(1)
             if len(calls) == 1:
                 querying.set()
                 gate.wait(5)
             return []
+
         api = poll_only_api()
         api.base.receivers = receivers
         helper = EVENTS.Helper(api, emitter)
         thread = self.start(helper)
         self.assertTrue(querying.wait(5), "the first query started")
-        helper.request(); helper.request()
+        helper.request()
+        helper.request()
         gate.set()
         self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
         time.sleep(0.3)
         self.assertEqual(len(calls), 2)
-        helper.stop(); thread.join(5)
+        helper.stop()
+        thread.join(5)
 
     def test_pending_change_during_a_slow_query_does_not_spin(self):
         # Regression: an expired debounce deadline kept select() at timeout 0
@@ -244,32 +260,37 @@ class HelperTest(unittest.TestCase):
         gate = threading.Event()
         querying = threading.Event()
         calls = []
+
         def receivers():
             calls.append(1)
             if len(calls) == 2:
                 querying.set()
                 gate.wait(5)
             return []
+
         api = poll_only_api()
         api.base.receivers = receivers
         helper = EVENTS.Helper(api, emitter)
         selects = []
         real_select = EVENTS.select.select
+
         def counting_select(*args):
             selects.append(args[3])
             return real_select(*args)
+
         with unittest.mock.patch.object(EVENTS.select, "select", counting_select):
             thread = self.start(helper)
             self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
-            helper.request()            # second read blocks in the worker
+            helper.request()  # second read blocks in the worker
             self.assertTrue(querying.wait(5), "the second read started")
-            helper.mark_changed()       # change arrives while it is busy
+            helper.mark_changed()  # change arrives while it is busy
             before = len(selects)
             time.sleep(EVENTS.DEBOUNCE + 0.6)
             spins = len(selects) - before
             gate.set()
             self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 3))
-            helper.stop(); thread.join(5)
+            helper.stop()
+            thread.join(5)
         self.assertLess(spins, 10, f"{spins} select() calls while the worker was busy")
         self.assertEqual(len(calls), 3, "the pending change is read after the slow query")
 
@@ -317,7 +338,8 @@ class HelperTest(unittest.TestCase):
             self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) >= 2))
             self.assertTrue(thread.is_alive(), "the helper keeps serving snapshots")
             self.assertFalse(helper.healthy())
-            helper.stop(); thread.join(5)
+            helper.stop()
+            thread.join(5)
         self.assertEqual(self.rc, 0)
         self.assertEqual(emitter.statuses()[-1]["payload"]["status"], "ok")
 
@@ -339,8 +361,14 @@ class HelperProcessTest(unittest.TestCase):
             for name, text in files.items():
                 (package / name).write_text(text)
             env = dict(os.environ, PYTHONPATH=directory, XDG_RUNTIME_DIR=directory)
-            process = subprocess.Popen([sys.executable, str(HELPER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.DEVNULL, env=env, text=True)
+            process = subprocess.Popen(
+                [sys.executable, str(HELPER)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                text=True,
+            )
             events = []
             try:
                 # Two snapshots (start, then `refresh`), then close stdin as the shell would.
@@ -353,7 +381,8 @@ class HelperProcessTest(unittest.TestCase):
                     statuses = len([e for e in events if e["event"] == "status"])
                     if statuses == 1 and events[-1]["event"] == "status":
                         try:
-                            process.stdin.write("refresh\n"); process.stdin.flush()
+                            process.stdin.write("refresh\n")
+                            process.stdin.flush()
                         except BrokenPipeError:
                             pass  # exit-code cases stop on their own
                     if statuses == 2:
@@ -371,11 +400,13 @@ class HelperProcessTest(unittest.TestCase):
                 process.stdout.close()
 
     def test_stray_prints_never_reach_the_protocol_and_eof_stops(self):
-        rc, events = self.run_helper({
-            "__init__.py": "print('noise from solaar')\n",
-            "base.py": "def receivers():\n    print('more noise')\n    return []\n",
-            "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
-        })
+        rc, events = self.run_helper(
+            {
+                "__init__.py": "print('noise from solaar')\n",
+                "base.py": "def receivers():\n    print('more noise')\n    return []\n",
+                "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
+            }
+        )
         self.assertEqual(rc, 0)
         statuses = [e for e in events if e["event"] == "status"]
         self.assertEqual(len(statuses), 2)

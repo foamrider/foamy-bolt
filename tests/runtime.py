@@ -11,6 +11,7 @@ tried anyway fails the run.
 FOAMY_KIT (default ~/GitHub/Personal/foamy-kit) provides the harness.
 The host is Omarchy 4.5: FOAMY_HOST_45, else $OMARCHY_TEST_ROOT/shell, else
 the installed /usr/share/omarchy/shell."""
+
 import json
 import os
 from pathlib import Path
@@ -56,8 +57,13 @@ def ipc_status(run):
     ids = harness.wait_for(lambda: [p.name for p in by_id.iterdir()] if by_id.is_dir() else [], timeout=5)
     if not ids:
         return None
-    result = subprocess.run(["qs", "ipc", "-i", ids[0], "call", "foamy.bolt", "status"], env=run.env,
-                            capture_output=True, text=True, timeout=10)
+    result = subprocess.run(
+        ["qs", "ipc", "-i", ids[0], "call", "foamy.bolt", "status"],
+        env=run.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
     return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -87,15 +93,26 @@ def run(host, lang):
     # A short prefix: qs's IPC socket sits five levels below this dir, and a
     # unix socket path over 107 bytes fails to bind (no `qs ipc` reply) when
     # TMPDIR is a longer path than /tmp.
-    r = harness.Run(host, shell, plugin=PLUGIN, language=lang, prefix=f"bolt-{lang}-",
-                    fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR,
-                             "uwsm-app": FAKE_UWSM_APP})
+    r = harness.Run(
+        host,
+        shell,
+        plugin=PLUGIN,
+        language=lang,
+        prefix=f"bolt-{lang}-",
+        fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR, "uwsm-app": FAKE_UWSM_APP},
+    )
     starts = r.base / "helper-starts"
     # DISPLAY is set on purpose: the helper must not receive it.
-    r.env.update(FOAMY_LANG=lang, FOAMY_HOLD_MS="3000", DISPLAY=":99",
-                 FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"), FOAMY_BOLT_STARTS=str(starts),
-                 FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"), FOAMY_BOLT_SOLAAR_LOG=str(r.base / "solaar.log"),
-                 FOAMY_BOLT_UWSM_LOG=str(r.base / "uwsm-app.log"))
+    r.env.update(
+        FOAMY_LANG=lang,
+        FOAMY_HOLD_MS="3000",
+        DISPLAY=":99",
+        FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"),
+        FOAMY_BOLT_STARTS=str(starts),
+        FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"),
+        FOAMY_BOLT_SOLAAR_LOG=str(r.base / "solaar.log"),
+        FOAMY_BOLT_UWSM_LOG=str(r.base / "uwsm-app.log"),
+    )
     r.start()
     samples, done = {}, threading.Event()
     sampler = threading.Thread(target=watch_rss, args=(r.base / "qs.log", r.process.pid, samples, done), daemon=True)
@@ -108,7 +125,9 @@ def run(host, lang):
         r.stop()
     sampler.join(timeout=5)
     log = r.log
-    result = next((line.split("FOAMY RESULT ", 1)[1] for line in log.splitlines() if "FOAMY RESULT" in line), "no result")
+    result = next(
+        (line.split("FOAMY RESULT ", 1)[1] for line in log.splitlines() if "FOAMY RESULT" in line), "no result"
+    )
     failures = r.failures()
     try:
         leader = status is not None and json.loads(status).get("leader") is True
