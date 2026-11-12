@@ -217,17 +217,19 @@ class HelperTest(unittest.TestCase):
     def test_refresh_during_a_query_runs_once_more_afterwards(self):
         emitter = FakeEmitter()
         gate = threading.Event()
+        querying = threading.Event()
         calls = []
         def receivers():
             calls.append(1)
             if len(calls) == 1:
+                querying.set()
                 gate.wait(5)
             return []
         api = poll_only_api()
         api.base.receivers = receivers
         helper = EVENTS.Helper(api, emitter)
         thread = self.start(helper)
-        time.sleep(0.2)
+        self.assertTrue(querying.wait(5), "the first query started")
         helper.request(); helper.request()
         gate.set()
         self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 2))
@@ -240,10 +242,12 @@ class HelperTest(unittest.TestCase):
         # while the worker was busy, spinning a core until the query ended.
         emitter = FakeEmitter()
         gate = threading.Event()
+        querying = threading.Event()
         calls = []
         def receivers():
             calls.append(1)
             if len(calls) == 2:
+                querying.set()
                 gate.wait(5)
             return []
         api = poll_only_api()
@@ -258,7 +262,7 @@ class HelperTest(unittest.TestCase):
             thread = self.start(helper)
             self.assertTrue(emitter.wait(lambda e: len([x for x in e if x["event"] == "status"]) == 1))
             helper.request()            # second read blocks in the worker
-            time.sleep(0.2)
+            self.assertTrue(querying.wait(5), "the second read started")
             helper.mark_changed()       # change arrives while it is busy
             before = len(selects)
             time.sleep(EVENTS.DEBOUNCE + 0.6)

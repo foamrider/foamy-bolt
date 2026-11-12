@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -12,6 +13,17 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "kit/clipboard.sh"
+KIT = Path(os.environ.get("FOAMY_KIT", Path.home() / "GitHub/Personal/foamy-kit"))
+
+
+def load_hostenv():
+    """foamy-kit's preview/hostenv.py, imported from the kit checkout, or None."""
+    if not (KIT / "preview/hostenv.py").exists():
+        return None
+    sys.path.insert(0, str(KIT / "preview"))
+    import hostenv
+
+    return hostenv
 MOCK = '''#!/usr/bin/python3
 import json, os, signal, sys, time
 from pathlib import Path
@@ -171,6 +183,13 @@ ShellRoot {
         env = dict(self.env, QT_QPA_PLATFORM=os.environ.get("FOAMY_TEST_PLATFORM", "offscreen"),
                    QT_QUICK_BACKEND="software", QT_QPA_PLATFORMTHEME="",
                    XDG_RUNTIME_DIR=str(runtime))
+        # The kit's isolation for a qs the test starts itself: no Omarchy bin
+        # directory or AppImage library on the paths, no audio server or system bus.
+        hostenv = load_hostenv()
+        if hostenv is None:
+            self.skipTest(f"foamy-kit's preview/hostenv.py not found at {KIT} (set FOAMY_KIT)")
+        hostenv.isolate(env, self.base)
+        env["PATH"] = f"{self.base}:{env['PATH']}"
         if env["QT_QPA_PLATFORM"] == "wayland":
             # Keep test logs/IPC private without hiding the host compositor socket.
             display = Path(os.environ["WAYLAND_DISPLAY"])
@@ -180,6 +199,7 @@ ShellRoot {
                                 env=env, text=True, capture_output=True, timeout=35)
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
+        hostenv.check(env, output)
         self.assertRegex(output, r"CLIPBOARD_RESULT passed=[1-9][0-9]* failed=0")
         self.assertIn("failed=0", output, output)
         print(output[output.index("CLIPBOARD_RESULT"):].splitlines()[0])
