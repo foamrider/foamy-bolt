@@ -115,6 +115,7 @@ ShellRoot {
     var glyph = shell.findByName(first, "barGlyph")
     check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
     eq(first.popup.bodyItem, null, "popup body is lazy")
+    shell.tooltipChecks(first)
     first.open()
     waitFor(function() { return first.popup.bodyItem !== null }, "the popup body is built", stepTwo)
   }
@@ -318,6 +319,28 @@ ShellRoot {
         })
       })
     })
+  }
+
+  // The bar tooltip carries device names and helper errors, and the host's
+  // tooltip has no size limit of its own: kit FoamyText caps it at 6 lines of
+  // 100 characters. A normal reading is unchanged.
+  function tooltipChecks(first) {
+    var service = Bolt.BoltService
+    if (shell.lang === "en") eq(first.tooltip(), "Logitech · MX Master 3S 12% · MX Keys S 64%", "the usual tooltip is unchanged")
+    var kept = service.payload
+    function bounded(label) {
+      var lines = first.tooltip().split("\n")
+      check(lines.length <= 6 && lines.every(function(line) { return Array.from(line).length <= 100 }),
+            label + ": " + lines.length + " lines, longest " + Math.max.apply(null, lines.map(function(line) { return line.length })))
+    }
+    var long = "x".repeat(5000)
+    var lines = Array(50).fill("Device").join("\n")
+    service.payload = ({ status: "ok", receivers: [{ name: "Bolt Receiver", productId: "C548" }], errors: [],
+                         devices: [{ name: long, online: true, battery: 50, charging: false }, { name: lines, online: true, battery: 40, charging: false }] })
+    bounded("device names are capped in the tooltip")
+    service.payload = ({ status: "error", receivers: [], devices: [], errors: Array(100).fill(long) })
+    bounded("helper errors are capped in the tooltip")
+    service.payload = kept
   }
 
   // The device list scrolls when it is taller than the card, and the keyboard

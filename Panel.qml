@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "kit"
+import "kit/FoamyText.js" as FoamyText
 import "Preferences.js" as Schema
 import "Model.js" as Model
 
@@ -95,7 +96,10 @@ Panel {
   }
   function save(key, value) { return prefs.save(key, value) }
 
-  function tooltip() {
+  // Device names come from the devices and errors from the helper, and the
+  // host's bar tooltip grows to fit any text: cap it (6 lines of 100 characters).
+  function tooltip() { return FoamyText.tooltip(tooltipLine()) }
+  function tooltipLine() {
     var brand = FoamyI18n.t("Logitech")
     if (payload.status === "loading") return FoamyI18n.t("%1 · %2", [brand, FoamyI18n.t("Reading devices…")])
     if (degraded) return [brand].concat(payload.errors.map(function(e) { return FoamyI18n.t(e) })).join(" · ")
