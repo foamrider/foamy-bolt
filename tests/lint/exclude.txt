@@ -1,0 +1,2 @@
+# Paths tests/validate.sh does not check, each with its reason.
+tests/qml/*  qmllint  # harness scenes: their imports ("harness", "plugin") exist only in the harness's staged copy
