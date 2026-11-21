@@ -766,6 +766,40 @@ ShellRoot {
       return row.Accessible.name
     })
     eq(JSON.stringify(names), JSON.stringify(["MX Master 3S, " + t("Low battery") + ", " + t("%1%", 12), "MX Keys S, " + t("Charging") + ", " + t("%1%", 64), "G435, " + t("Offline")]), "each row says its device, state and reading")
+    // The other states: charging wins over low battery, an online device
+    // without a reading, and an online device above the threshold.
+    service.payload = ({
+        status: "ok",
+        receivers: receiver(),
+        devices: [
+          {
+            name: "Lift",
+            online: true,
+            battery: 10,
+            charging: true,
+            kindIcon: "mouse"
+          },
+          {
+            name: "MX Mechanical",
+            online: true,
+            battery: null,
+            charging: false,
+            kindIcon: "keyboard"
+          },
+          {
+            name: "Pebble",
+            online: true,
+            battery: 80,
+            charging: false,
+            kindIcon: "mouse"
+          }
+        ],
+        errors: []
+      })
+    names = rows().map(function (row) {
+      return row.Accessible.name
+    })
+    eq(JSON.stringify(names), JSON.stringify(["Lift, " + t("Charging") + ", " + t("%1%", 10), "MX Mechanical, " + t("Battery unavailable"), "Pebble, " + t("Connected") + ", " + t("%1%", 80)]), "charging, no reading and connected rows")
     service.payload = ({
         status: "ok",
         receivers: [],
