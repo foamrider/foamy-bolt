@@ -102,11 +102,12 @@ def run(host, lang):
         fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR, "uwsm-app": FAKE_UWSM_APP},
     )
     starts = r.base / "helper-starts"
-    # DISPLAY is set on purpose: the helper must not receive it.
+    # DISPLAY is set, empty, on purpose: the helper must not receive it. The
+    # harness refuses a DISPLAY that names a display; an empty one reaches none.
     r.env.update(
         FOAMY_LANG=lang,
         FOAMY_HOLD_MS="3000",
-        DISPLAY=":99",
+        DISPLAY="",
         FOAMY_BOLT_FAKE_HELPER=str(PLUGIN / "tests/fake_helper.py"),
         FOAMY_BOLT_STARTS=str(starts),
         FOAMY_BOLT_CMD_LOG=str(r.base / "cmd-present.log"),

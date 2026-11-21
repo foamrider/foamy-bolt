@@ -17,7 +17,8 @@ import time
 with open(os.environ["FOAMY_BOLT_STARTS"], "a") as starts:
     starts.write(f"{os.getpid()}\n")
 
-display = "display:set" if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY") else "display:none"
+# Present at all, even empty: the test sets an empty DISPLAY for the shell.
+display = "display:set" if "DISPLAY" in os.environ or "WAYLAND_DISPLAY" in os.environ else "display:none"
 
 
 def status(count):
