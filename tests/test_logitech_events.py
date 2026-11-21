@@ -524,8 +524,8 @@ class HelperProcessTest(unittest.TestCase):
 
     def parse_in_shell_model(self, lines):
         node = shutil.which("node")
-        if node is None:
-            self.skipTest("node is unavailable")
+        # tests/suite.sh needs node for its other tests too: none is a failure, not a skip.
+        self.assertIsNotNone(node, "node is needed to run the shell's parser (Model.js)")
         result = subprocess.run(
             [node, "-e", PARSE_EVENTS, str(HELPER.with_name("Model.js"))],
             input="".join(lines),
