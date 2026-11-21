@@ -69,9 +69,13 @@ test('every string the plugin shows has a catalog key', () => {
     for (const match of text.matchAll(/errors=\[([^\]]*)\]/g)) for (const literal of stringLiterals(match[1])) literals.push([file, literal]);
   }
   for (const match of read('Model.js').matchAll(/^var \w+Error="([^"]+)"/gm)) literals.push(['Model.js', match[1]]);
+  // The footer's "just now" text: FoamyI18n.updatedAgo looks it up itself.
+  literals.push(['FoamyI18n.updatedAgo', 'Updated just now']);
   // A scan that stops matching must fail, not pass with nothing to check.
   const found = new Set(literals.map(([, key]) => key));
-  for (const sentinel of ['Device query failed.', 'Offline', 'No paired devices found', 'Solaar Python support is not installed.', 'Layout'])
+  // One string per source; only Model.js has "Device readings stopped".
+  const sentinels = ['Device query failed.', 'Offline', 'No paired devices found', 'Solaar Python support is not installed.', 'Layout', 'Device readings stopped. Retrying automatically.'];
+  for (const sentinel of sentinels)
     assert.ok(found.has(sentinel), `scan finds ${sentinel}`);
   assert.ok(found.size >= 20, `scan finds ${found.size} strings`);
   for (const [file, key] of literals) assert.ok(Object.hasOwn(en, key), `${file}: missing catalog entry ${key}`);
