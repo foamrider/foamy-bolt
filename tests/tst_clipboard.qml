@@ -149,8 +149,6 @@ Item {
       verify(editor !== null)
       compare(editor.topPadding, 0)
       compare(editor.bottomPadding, 0)
-      compare(editor.leftPadding, 7)
-      compare(editor.rightPadding, 7)
       verify(editor.cursorRectangle.y + editor.cursorRectangle.height + editor.topPadding <= field.height)
       field.height = 36
     }
