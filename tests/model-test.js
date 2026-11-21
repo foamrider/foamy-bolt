@@ -35,7 +35,7 @@ test('status payloads are validated and bounded', () => {
 test('tooltip: one entry per line under the heading, line breaks inside an entry become spaces', () => {
   const five = ['MX Master 3S 10%', 'MX Keys S 20%', 'MX Anywhere 3S 30%', 'MX Mechanical Mini 40%', 'Lift Vertical Ergonomic Mouse 50%']
   assert.equal(M.tooltipText('Logitech', five), ['Logitech', ...five].join('\n'), 'five devices, one per line')
-  assert.equal(M.tooltipText('Logitech', ['Two\nlines 10%', 'Three\r\nline name 20%']), 'Logitech\nTwo lines 10%\nThree line name 20%')
+  assert.equal(M.tooltipText('Logitech', ['Two\nlines 10%', 'Three\r\nline\u2028name 20%']), 'Logitech\nTwo lines 10%\nThree line name 20%')
   assert.equal(M.tooltipText('Logitech', []), 'Logitech', 'no entries: the heading only')
 })
 
