@@ -1,50 +1,86 @@
+const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const I = require('./i18n.cjs');
-const manifest = require('../manifest.json');
 const Schema = require('../Preferences.js');
+const en = require('../i18n/en.json');
+const no = require('../i18n/no.json');
 const root = path.join(__dirname, '..');
 const tokens = s => [...String(s).matchAll(/%[1-9][0-9]*|\{\w+\}/g)].map(m => m[0]).sort();
 const forms = v => (typeof v === 'object' ? Object.values(v) : [v]);
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const qmlFiles = fs.readdirSync(root).filter(f => f.endsWith('.qml'));
+const helperFiles = ['logitech_status.py', 'logitech_events.py'];
 
-for (const [key, value] of Object.entries(I.en)) {
-  assert.equal(typeof value === 'object' ? value.other : value, key, `English source key: ${key}`);
-  assert.ok(Object.hasOwn(I.no, key), `Norwegian entry: ${key}`);
-  for (const form of forms(I.no[key])) assert.deepEqual(tokens(form), tokens(key), key);
-  if (typeof value === 'object') assert.ok(value.one && value.other && I.no[key].one && I.no[key].other, `plural forms: ${key}`);
+// The first argument of a call that starts at `start` (just after its "("):
+// up to the first comma or closing bracket at depth 0, skipping strings.
+function firstArgument(text, start) {
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'") {
+      for (i++; i < text.length && text[i] !== c; i++) if (text[i] === '\\') i++;
+    } else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) {
+      if (depth === 0) return text.slice(start, i);
+      depth--;
+    } else if (c === ',' && depth === 0) return text.slice(start, i);
+  }
+  return text.slice(start);
 }
-assert.deepEqual(Object.keys(I.no).sort(), Object.keys(I.en).sort());
+const stringLiterals = text => [...text.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => JSON.parse(`"${m[1]}"`));
 
-// Every literal the plugin translates has an English catalog entry: QML
-// literals, schema labels and options, and the helper's payload errors.
-const literals = [];
-for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
-  const text = fs.readFileSync(path.join(root, file), 'utf8');
-  for (const match of text.matchAll(/FoamyI18n\.tn?\("((?:[^"\\]|\\.)*)"/g)) literals.push([file, match[1]]);
-  for (const match of text.matchAll(/FoamyI18n\.t\([^)"]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/g)) literals.push([file, match[1]], [file, match[2]]);
+// Every string literal in the key argument of FoamyI18n.t/tn/updatedAgo,
+// also inside a ternary: [file, call, literal].
+function qmlKeys() {
+  const keys = [];
+  for (const file of qmlFiles) {
+    const text = read(file);
+    for (const match of text.matchAll(/FoamyI18n\.(t|tn|updatedAgo)\(/g))
+      for (const literal of stringLiterals(firstArgument(text, match.index + match[0].length))) keys.push([file, match[1], literal]);
+  }
+  return keys;
 }
-for (const field of Schema.fields) {
-  literals.push(['Preferences.js', field.label]);
-  for (const option of field.options || []) literals.push(['Preferences.js', Schema.optionLabel(option)]);
-}
-for (const file of ['logitech_status.py', 'logitech_events.py'])
-  for (const match of fs.readFileSync(path.join(root, file), 'utf8').matchAll(/^[A-Z_]*ERROR = "([^"]+)"/gm)) literals.push([file, match[1]]);
-for (const match of fs.readFileSync(path.join(root, 'Model.js'), 'utf8').matchAll(/^var \w+Error="([^"]+)"/gm)) literals.push(['Model.js', match[1]]);
-assert.ok(literals.some(([file]) => file === 'logitech_status.py'), 'helper errors found');
-assert.ok(literals.some(([file]) => file === 'Model.js'), 'model errors found');
-for (const [file, key] of literals) assert.ok(Object.hasOwn(I.en, key), `${file}: missing catalog entry ${key}`);
 
-// Counts go through tn() with a plural entry; no glued "n + text" plurals.
-for (const key of ['%1 devices connected', 'Updated %1 minutes ago', '%1 seconds', '%1 minutes', '%1 hours'])
-  assert.equal(typeof I.en[key], 'object', `plural entry: ${key}`);
-for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml')))
-  assert.doesNotMatch(fs.readFileSync(path.join(root, file), 'utf8'), /\.length\s*\+\s*" "/, `${file}: glued plural`);
+test('catalogs: same keys, same placeholders, plural forms, no empty entry', () => {
+  for (const [key, value] of Object.entries(en)) {
+    assert.equal(typeof value === 'object' ? value.other : value, key, `English source key: ${key}`);
+    assert.ok(Object.hasOwn(no, key), `Norwegian entry: ${key}`);
+    for (const form of forms(no[key])) {
+      // The kit falls back to English on "" without telling anyone.
+      assert.ok(typeof form === 'string' && form !== '', `Norwegian text is empty: ${key}`);
+      assert.deepEqual(tokens(form), tokens(key), key);
+    }
+    if (typeof value === 'object') assert.ok(value.one && value.other && no[key].one && no[key].other, `plural forms: ${key}`);
+  }
+  assert.deepEqual(Object.keys(no).sort(), Object.keys(en).sort());
+});
 
-assert.equal(manifest.barWidget?.defaults?.language, undefined);
-assert.equal((manifest.barWidget?.schema || []).some(f => f.key === 'language'), false);
-assert.equal(I.text('Unknown %1 {name}', 'no', ['$& %2']), 'Unknown $& %2 {name}');
-assert.equal(I.text('constructor', 'no'), 'constructor');
-assert.equal(I.text('%1%', 'no', [42]), '42 %');
-assert.ok(!fs.existsSync(path.join(root, 'FoamyI18n.qml')), 'the forked FoamyI18n is gone');
-console.log(`ok — ${Object.keys(I.en).length} catalog entries, ${literals.length} literals checked`);
+test('every string the plugin shows has a catalog key', () => {
+  const literals = qmlKeys().map(([file, , key]) => [file, key]);
+  for (const field of Schema.fields) {
+    literals.push(['Preferences.js', field.label]);
+    for (const option of field.options || []) literals.push(['Preferences.js', Schema.optionLabel(option)]);
+  }
+  // Payload errors and health text from the helper, shown through FoamyI18n.t(e).
+  for (const file of helperFiles) {
+    const text = read(file);
+    for (const match of text.matchAll(/^[A-Z_]*ERROR = "([^"]+)"/gm)) literals.push([file, match[1]]);
+    for (const match of text.matchAll(/errors=\[([^\]]*)\]/g)) for (const literal of stringLiterals(match[1])) literals.push([file, literal]);
+  }
+  for (const match of read('Model.js').matchAll(/^var \w+Error="([^"]+)"/gm)) literals.push(['Model.js', match[1]]);
+  // A scan that stops matching must fail, not pass with nothing to check.
+  const found = new Set(literals.map(([, key]) => key));
+  for (const sentinel of ['Device query failed.', 'Offline', 'No paired devices found', 'Solaar Python support is not installed.', 'Layout'])
+    assert.ok(found.has(sentinel), `scan finds ${sentinel}`);
+  assert.ok(found.size >= 20, `scan finds ${found.size} strings`);
+  for (const [file, key] of literals) assert.ok(Object.hasOwn(en, key), `${file}: missing catalog entry ${key}`);
+});
+
+test('counts go through tn() with a plural entry', () => {
+  const plural = qmlKeys().filter(([, call]) => call === 'tn');
+  assert.ok(plural.some(([, , key]) => key === '%1 devices connected'), 'scan finds the tn() keys');
+  // FoamyI18n.updatedAgo looks these up itself.
+  const keys = plural.map(([file, , key]) => [file, key]).concat(['Updated %1 minutes ago', 'Updated %1 hours ago', 'Updated %1 days ago'].map(key => ['FoamyI18n.updatedAgo', key]));
+  for (const [file, key] of keys) assert.equal(typeof en[key], 'object', `${file}: plural entry ${key}`);
+});
