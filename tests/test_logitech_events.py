@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+import queue
 import shutil
 import signal
 import subprocess
@@ -21,6 +22,14 @@ SPEC = importlib.util.spec_from_file_location("logitech_events", HELPER)
 EVENTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVENTS)
 STATUS = EVENTS.STATUS
+# The desktop session stays out of every process a test starts.
+DESKTOP_VARIABLES = ("WAYLAND_DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "DISPLAY")
+
+
+def isolated_env(**extra):
+    env = {name: value for name, value in os.environ.items() if name not in DESKTOP_VARIABLES}
+    env.update(extra)
+    return env
 
 
 class EventFilterTest(unittest.TestCase):
@@ -443,7 +452,7 @@ class HelperProcessTest(unittest.TestCase):
         package.mkdir()
         for name, text in files.items():
             (package / name).write_text(text)
-        env = dict(os.environ, PYTHONPATH=directory.name, XDG_RUNTIME_DIR=directory.name)
+        env = isolated_env(PYTHONPATH=directory.name, XDG_RUNTIME_DIR=directory.name)
         process = subprocess.Popen(
             [sys.executable, str(HELPER)],
             stdin=subprocess.PIPE,
@@ -452,11 +461,23 @@ class HelperProcessTest(unittest.TestCase):
             env=env,
             text=True,
         )
+        # A reader thread feeds a queue, so that every wait for a line has a
+        # deadline, also when the helper starts but never prints.
+        output = queue.Queue()
+
+        def read():
+            for line in process.stdout:
+                output.put(line)
+            output.put("")  # end of output
+
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
 
         def stop():
             if process.poll() is None:
                 process.kill()
                 process.wait()
+            reader.join(5)
             process.stdout.close()
             try:
                 process.stdin.close()
@@ -465,18 +486,22 @@ class HelperProcessTest(unittest.TestCase):
 
         # Registered after the directory's cleanup, so it runs first.
         self.addCleanup(stop)
-        return process
+        return process, output
+
+    def next_line(self, output, deadline):
+        """The helper's next stdout line, or "" at the end of its output."""
+        try:
+            return output.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty:
+            self.fail("no line from the helper before the deadline")
 
     def run_helper(self, files, timeout=10):
         """Exit code, events and raw stdout lines of one run: two snapshots
         (start, then `refresh`), then stdin closed as the shell would."""
-        process = self.start_helper(files)
+        process, output = self.start_helper(files)
         lines = []
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            line = process.stdout.readline()
-            if not line:
-                break
+        while line := self.next_line(output, deadline):
             lines.append(line)
             events = [json.loads(raw) for raw in lines]
             statuses = len([e for e in events if e["event"] == "status"])
@@ -492,7 +517,9 @@ class HelperProcessTest(unittest.TestCase):
             process.stdin.close()
         except BrokenPipeError:
             pass
-        lines += process.stdout.read().splitlines(keepends=True)
+        # The rest of the output, unless it already ended.
+        while line and (line := self.next_line(output, deadline)):
+            lines.append(line)
         return process.wait(timeout), [json.loads(raw) for raw in lines], lines
 
     def parse_in_shell_model(self, lines):
@@ -502,6 +529,7 @@ class HelperProcessTest(unittest.TestCase):
         result = subprocess.run(
             [node, "-e", PARSE_EVENTS, str(HELPER.with_name("Model.js"))],
             input="".join(lines),
+            env=isolated_env(),
             capture_output=True,
             text=True,
             timeout=30,
@@ -518,10 +546,11 @@ class HelperProcessTest(unittest.TestCase):
 
     def test_sigterm_stops_the_helper_with_exit_0(self):
         # BoltService.stop() ends the helper with SIGTERM, stdin still open.
-        process = self.start_helper(STRAY_PRINTS)
-        first = json.loads(process.stdout.readline() or "{}")
+        process, output = self.start_helper(STRAY_PRINTS)
+        deadline = time.monotonic() + 10
+        first = json.loads(self.next_line(output, deadline) or "{}")
         while first.get("event") == "health":
-            first = json.loads(process.stdout.readline() or "{}")
+            first = json.loads(self.next_line(output, deadline) or "{}")
         self.assertEqual(first.get("event"), "status", "the helper started")
         process.send_signal(signal.SIGTERM)
         self.assertEqual(process.wait(5), 0)
