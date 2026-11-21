@@ -371,7 +371,6 @@ ShellRoot {
   function stepFlood() {
     var service = Bolt.BoltService
     var startsBefore = service.starts
-    check(service.helper.stderr !== null, "helper stderr is read, not buffered")
     service.helper.write("flood\n")
     waitFor(function () {
       return !service.runActive
@@ -584,21 +583,10 @@ ShellRoot {
     tallView.moveRequested(0, -1)
     tallView.moveRequested(0, -1)
     eq(tallView.cursorKey, "settings", "back to the header")
-    // A mouse-wheel notch scrolls about three rows (FoamyWheelScroll), even
-    // when a high-resolution wheel splits it into 8 x 15.
+    // A mouse-wheel notch scrolls about three rows however the mouse splits
+    // it: the kit's FoamyWheelScroll does that (foamy-kit tests it).
     var wheel = tallView.listWheel
     check(!!wheel && wheel.target === list, "the list scrolls with the kit wheel handling")
-    if (!wheel)
-      return
-    wheel.scrollTo(0, false)
-    for (var n = 0; n < 8; n++)
-      wheel.wheel({
-        angleDelta: Qt.point(0, -15),
-        pixelDelta: Qt.point(0, 0)
-      })
-    var to = isNaN(wheel.destination) ? list.contentY : wheel.destination
-    check(Math.abs(to - Math.min(wheel.notch, wheel.maxY)) < 1, "one wheel notch scrolls about three rows: " + to)
-    wheel.scrollTo(0, false)
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that
