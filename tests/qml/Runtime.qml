@@ -1,22 +1,33 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "harness"
 import "plugin" as Bolt
 import "plugin/kit"
 
 // Foamy Bolt under a real host shell, offscreen: three bar instances (as on
-// three monitors) share ONE helper (a fake that speaks the helper protocol),
-// one leader owns IPC, the popup body is lazy, the single keyboard cursor,
-// settings saving through the bar, backoff and restart (also after a helper
-// that can't start, stalls or floods its output), teardown when the last
-// instance goes, a bar reload while the stopped helper is still exiting,
-// opening Solaar, translations, plurals and RTL mirroring.
+// three monitors) share ONE helper, one leader owns IPC, the popup body is
+// lazy, the single keyboard cursor, the bar's glyph, percentage and tooltip,
+// device rows and empty states, settings saving through the bar, backoff and
+// restart (also after a helper that can't start, stalls or floods its
+// output), teardown when the last instance goes, a bar reload while the
+// stopped helper is still exiting, opening Solaar, translations, plurals and
+// RTL mirroring.
+//
+// FOAMY_SCENARIO=full (tests/runtime.py's English run) first starts the real
+// logitech_events.py with BoltService's default command against a fake
+// Solaar that is missing, then a fake helper that speaks the protocol
+// (tests/fake_helper.py). FOAMY_SCENARIO=language starts with the fake and
+// ends after the popup and settings checks.
 ShellRoot {
   id: shell
   readonly property string host: Quickshell.env("FOAMY_HOST")
   readonly property string lang: Quickshell.env("FOAMY_LANG") || "en"
+  readonly property bool full: (Quickshell.env("FOAMY_SCENARIO") || "full") === "full"
+  // Helper starts before the fake's first run (the real helper's, in full).
+  property int baseStarts: 0
   property int checks: 0
   property int failures: 0
 
@@ -48,11 +59,7 @@ ShellRoot {
         Bolt.Panel {
           bar: mockBar
           moduleName: "foamy.bolt"
-          settings: ({
-              id: "foamy.bolt",
-              layout: "list",
-              extra: "kept"
-            })
+          settings: shell.barSettings({})
         }
       }
     }
@@ -105,6 +112,44 @@ ShellRoot {
   function key(view, text) {
     keys.emitTextKey(view, text, 0)
   }
+  // The delegate's settings, with `changes` on top. refreshSeconds is not the
+  // default, so the leader's interval reaching BoltService is visible.
+  function barSettings(changes) {
+    var settings = {
+      id: "foamy.bolt",
+      layout: "list",
+      extra: "kept",
+      refreshSeconds: 120
+    }
+    for (var key in changes)
+      settings[key] = changes[key]
+    return settings
+  }
+  // Every item under `item` (itself included) for which `match` holds.
+  function findAll(item, match) {
+    var found = []
+    if (!item)
+      return found
+    if (match(item))
+      found.push(item)
+    for (var i = 0; i < item.children.length; i++)
+      found = found.concat(findAll(item.children[i], match))
+    return found
+  }
+  // The visible text items that show exactly `text`.
+  function shownText(item, text) {
+    return findAll(item, function (candidate) {
+      return candidate.text === text && candidate.visible && candidate.width > 0
+    })
+  }
+  // The host WidgetButton around a bar instance's glyph: what the bar draws,
+  // what its tooltip shows and where the pointer presses arrive.
+  function barButton(panel) {
+    var item = findByName(panel, "barGlyph")
+    while (item && !(item.tooltipText !== undefined && typeof item.pressed === "function"))
+      item = item.parent
+    return item
+  }
   function findByName(item, name) {
     if (!item)
       return null
@@ -138,8 +183,42 @@ ShellRoot {
 
   Component.onCompleted: {
     eq(Bolt.BoltService.running, false, "no helper before any bar instance")
-    Bolt.BoltService.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
+    if (!shell.full) {
+      startFake()
+      return
+    }
+    // The default command: python3 runs the plugin's logitech_events.py,
+    // which finds the fake, missing Solaar and exits 3.
     panels.model = 3
+    waitFor(function () {
+      var service = Bolt.BoltService
+      return service.lastExitCode === 3 && !service.runActive && service.waiting
+    }, "the real helper reports a missing Solaar", realHelperChecks)
+  }
+
+  function realHelperChecks() {
+    var service = Bolt.BoltService
+    eq(service.payload.status, "unavailable", "the real helper says Solaar is missing")
+    eq(service.payload.errors[0], "Solaar Python support is not installed.", "its own message is kept, not the stopped-helper one")
+    eq(service.restartTimer.interval, 300000, "exit 3 waits 5 minutes before a restart")
+    eq(service.failures, 1, "one failure")
+    eq(service.eventError, "Device event monitoring unavailable. Periodic refresh is still active.", "event error from the helper")
+    eq(service.eventDetail, "Solaar is not installed", "with the helper's detail")
+    eq(panels.itemAt(0).degraded, true, "the bar shows the degraded state")
+    var button = barButton(panels.itemAt(0))
+    eq(button ? button.tooltipText.split("\n")[1] : "", FoamyI18n.t("Solaar Python support is not installed."), "the bar tooltip explains it")
+    shell.baseStarts = service.starts
+    startFake()
+  }
+
+  // The fake helper from here on; in full mode Refresh starts it at once
+  // instead of after the 5 minute wait.
+  function startFake() {
+    Bolt.BoltService.helperCommand = ["python3", Quickshell.env("FOAMY_BOLT_FAKE_HELPER")]
+    if (shell.full)
+      panels.itemAt(0).refresh(true)
+    else
+      panels.model = 3
     waitFor(function () {
       return leaders() === 1 && Bolt.BoltService.members === 3 && Bolt.BoltService.payload.status === "ok"
     }, "the helper's first snapshot", stepOne)
@@ -149,24 +228,56 @@ ShellRoot {
     var service = Bolt.BoltService
     eq(leaders(), 1, "one leader across three bar instances")
     eq(service.members, 3, "three members")
-    eq(service.starts, 1, "one helper for three bar instances")
+    eq(service.starts, shell.baseStarts + 1, "one helper for three bar instances")
     eq(service.running, true, "helper running")
     eq(service.payload.status, "ok", "snapshot from the helper")
     eq(service.payload.devices.length, 3, "three devices")
     eq(service.payload.receivers.length ? service.payload.receivers[0].name : "", "display:none", "helper runs without a display")
-    eq(service.refreshSeconds, 300, "leader pushes the fallback interval")
+    eq(service.refreshSeconds, 120, "the leader's refresh interval reaches the service")
+    eq(service.poll.interval, 120000, "and sets the fallback poll")
+    eq(service.poll.running, true, "the fallback poll runs with the helper")
     var first = panels.itemAt(0)
-    eq(first.onlineDevices.length, 2, "online filter")
-    eq(first.lowestBattery, 12, "lowest battery")
-    eq(first.showPercentage, true, "low battery shows in the bar")
     var glyph = shell.findByName(first, "barGlyph")
-    check(glyph !== null && glyph.text.length > 0 && glyph.visible, "bar shows the bolt glyph")
+    check(glyph !== null, "bar has the glyph")
+    if (!glyph) {
+      finish()
+      return
+    }
+    // Code points, so the failure message is readable: the glyph is private-use.
+    eq(Array.from(glyph.text).map(function (c) {
+      return c.codePointAt(0).toString(16)
+    }).join(" "), "f0e7", "bar shows the Nerd Font bolt (U+F0E7)")
+    eq(glyph.visible, true, "the glyph is visible")
+    check(Qt.colorEqual(glyph.color, Commons.Color.urgent), "a battery under the threshold makes the glyph urgent")
+    shell.percentageChecks(first, glyph)
     eq(first.popup.bodyItem, null, "popup body is lazy")
     shell.tooltipChecks(first)
-    first.open()
+    barButton(first).pressed(Qt.LeftButton)
+    eq(first.opened, true, "a left click opens the popup")
     waitFor(function () {
       return first.popup.bodyItem !== null
     }, "the popup body is built", stepTwo)
+  }
+
+  // The lowest battery shows next to the glyph: when low (the default), or
+  // always; never with "never" or on a vertical bar.
+  function percentageChecks(first, glyph) {
+    var pct = glyph.parent.children[1]
+    check(pct.visible && pct.text === FoamyI18n.t("%1%", 12), "a low battery shows in the bar: " + pct.visible + " " + JSON.stringify(pct.text))
+    first.settings = shell.barSettings({
+      barPercentage: "never"
+    })
+    eq(pct.visible, false, "never: no percentage")
+    first.settings = shell.barSettings({
+      barPercentage: "always",
+      lowBatteryThreshold: 10
+    })
+    eq(pct.visible, true, "always: the percentage shows above the threshold too")
+    check(Qt.colorEqual(glyph.color, mockBar.barForeground), "above the threshold the glyph is not urgent")
+    mockBar.position = "left"
+    eq(pct.visible, false, "a vertical bar has no room for the percentage")
+    mockBar.position = "top"
+    first.settings = shell.barSettings({})
   }
 
   function stepTwo() {
@@ -178,6 +289,16 @@ ShellRoot {
       return
     }
     eq(view.devices.length, 2, "offline devices hidden by default")
+    var band = shell.findAll(view, function (item) {
+      return item.title !== undefined && item.meta !== undefined
+    })[0]
+    // Two online devices; "ar" has no catalog, so English proves the fallback.
+    eq(band ? band.meta : "", {
+      en: "2 devices connected",
+      no: "2 enheter tilkoblet",
+      ar: "2 devices connected"
+    }[shell.lang], "the header counts the online devices")
+    shell.rowChecks(first, view)
     eq(view.cursorKey, "", "no cursor highlight on open")
     view.moveRequested(0, 1)
     eq(view.cursorKey, "settings", "first move lands on Settings")
@@ -192,22 +313,16 @@ ShellRoot {
     shell.key(view, "r")
     eq(Bolt.BoltService.refreshing, true, "r asks the helper for a snapshot")
     eq(view.LayoutMirroring.enabled, shell.lang === "ar", "popup body mirrors in RTL only")
-    var plural = {
-      en: "1 device connected",
-      no: "1 enhet tilkoblet",
-      ar: "1 device connected"
-    }
-    if (shell.lang !== "ar")
-      eq(FoamyI18n.tn("%1 devices connected", 1), plural[shell.lang], "plural one")
-    var many = {
-      en: "2 devices connected",
-      no: "2 enheter tilkoblet"
-    }
-    if (shell.lang !== "ar")
-      eq(FoamyI18n.tn("%1 devices connected", 2), many[shell.lang], "plural other")
     shell.key(view, "s")
     eq(first.editingSettings, true, "s opens Settings")
     eq(view.blocked, true, "settings page owns the keys")
+    // The interval set from the CLI (120 s) is offered as well, in order.
+    var refreshEvery = shell.findAll(view, function (item) {
+      return item.label === FoamyI18n.t("Refresh every") && item.options !== undefined
+    })[0]
+    eq(refreshEvery ? JSON.stringify(refreshEvery.options.map(function (o) {
+      return o.value
+    })) : "", JSON.stringify(["60", "120", "300", "900", "1800", "3600"]), "Refresh every offers the choices and the current value")
     first.save("layout", "tiles")
     eq(mockBar.saved.length, 1, "setting saved inline")
     if (mockBar.saved.length === 1) {
@@ -223,7 +338,9 @@ ShellRoot {
     shell.thresholdChecks(first, view)
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
-    first.close()
+    // Esc reaches the view as PanelKeyCatcher.closeRequested.
+    view.closeRequested()
+    eq(first.opened, false, "Esc closes the popup")
     waitFor(function () {
       var p = Bolt.BoltService.payload
       return !Bolt.BoltService.refreshing && p.receivers.length > 0 && p.receivers[0].productId === "N2"
@@ -235,6 +352,10 @@ ShellRoot {
     eq(service.refreshing, false, "refresh answered")
     eq(service.payload.receivers.length ? service.payload.receivers[0].productId : "", "N2", "open + r: two refresh commands reached the one helper")
     check(service.lastUpdatedAt > 0, "snapshot time kept")
+    if (!shell.full) {
+      finish()
+      return
+    }
     // The settings IPC on a closed popup opens it on Settings (FoamySettingsState).
     var first = panels.itemAt(0)
     eq(first.opened, false, "popup closed")
@@ -259,15 +380,16 @@ ShellRoot {
     eq(service.payload.errors[0], "Device readings stopped. Retrying automatically.", "stopped-helper message")
     eq(service.payload.devices.length, 0, "no stale devices while nothing reads them")
     eq(panels.itemAt(0).degraded, true, "bar shows the degraded state")
+    eq(service.poll.running, false, "no fallback poll without a helper")
     panels.itemAt(1).refresh(true)
     waitFor(function () {
-      return service.starts === 2 && service.failures === 0 && service.payload.status === "ok"
+      return service.starts === shell.baseStarts + 2 && service.failures === 0 && service.payload.status === "ok"
     }, "Refresh restarts the helper", stepFive)
   }
 
   function stepFive() {
     var service = Bolt.BoltService
-    eq(service.starts, 2, "Refresh restarts a waiting helper now")
+    eq(service.starts, shell.baseStarts + 2, "Refresh restarts a waiting helper now")
     eq(service.running, true, "helper running again")
     eq(service.failures, 0, "a good snapshot resets the backoff")
     eq(service.payload.status, "ok", "readings back after the restart")
@@ -283,9 +405,9 @@ ShellRoot {
     eq(service.payload.errors[0], "Device query timed out. Try Refresh.", "its own error snapshot is kept")
     panels.itemAt(0).refresh(true)
     waitFor(function () {
-      return Bolt.BoltService.starts === 3 && Bolt.BoltService.payload.status === "ok"
+      return Bolt.BoltService.starts === shell.baseStarts + 3 && Bolt.BoltService.payload.status === "ok"
     }, "Refresh restarts it again", function () {
-      eq(Bolt.BoltService.starts, 3, "Refresh restarts it again")
+      eq(Bolt.BoltService.starts, shell.baseStarts + 3, "Refresh restarts it again")
       eq(Bolt.BoltService.payload.status, "ok", "readings back")
       stepCantStart()
     })
@@ -400,12 +522,13 @@ ShellRoot {
           console.log("FOAMY STDERR END")
           eq(service.running, true, "stderr noise doesn't stop the helper")
           eq(service.payload.receivers[0].productId, "N1", "helper answers after stderr noise")
-          checkScroll()
-          stepSolaar(function () {
-            panels.model = 0
-            waitFor(function () {
-              return service.members === 0 && !service.running
-            }, "the helper stops with the last bar", stepSix)
+          checkScroll(function () {
+            stepSolaar(function () {
+              panels.model = 0
+              waitFor(function () {
+                return service.members === 0 && !service.running
+              }, "the helper stops with the last bar", stepSix)
+            })
           })
         })
       })
@@ -462,8 +585,11 @@ ShellRoot {
     eq(more.length, 6, "more devices than fit: six lines")
     eq(more[5], line("D5", 4) + "…", "and the last one says the list goes on")
     check(more.indexOf(line("D6", 5)) < 0, "devices past the cap are not shown as if complete")
+    // What the host button carries, not Panel.tooltip(): a button bound to
+    // the uncapped text grows the tooltip window to fit it.
+    var button = barButton(first)
     function bounded(label) {
-      var lines = first.tooltip().split("\n")
+      var lines = (button ? button.tooltipText : "").split("\n")
       check(lines.length <= 6 && lines.every(function (line) {
         return Array.from(line).length <= 100
       }), label + ": " + lines.length + " lines, longest " + Math.max.apply(null, lines.map(function (line) {
@@ -519,12 +645,20 @@ ShellRoot {
     if (!field)
       return
     eq(field.field.text, "30", "shows the saved threshold")
-    first.settings = ({
-        id: "foamy.bolt",
-        layout: "tiles",
-        extra: "kept",
-        lowBatteryThreshold: 20
-      })
+    // Qt's own text editors read the whole clipboard in-process on paste;
+    // every editor on the page is the kit's bounded one.
+    var editors = shell.findAll(view, function (item) {
+      return item.cursorPosition !== undefined && item.selectByMouse !== undefined
+    })
+    check(editors.length > 0 && editors.every(function (editor) {
+      return editor.objectName === "safeEditor"
+    }), "the settings page edits only through the kit's safe editor: " + editors.map(function (editor) {
+      return editor.objectName || String(editor)
+    }).join(", "))
+    first.settings = shell.barSettings({
+      layout: "tiles",
+      lowBatteryThreshold: 20
+    })
     eq(field.field.text, "20", "an external change shows while Settings is open")
     var saves = mockBar.saved.length
     field.field.focusInput()
@@ -532,12 +666,10 @@ ShellRoot {
     view.forceActiveFocus()
     field.field.editingFinished()
     eq(mockBar.saved.length, saves, "tabbing through the unchanged field saves nothing")
-    first.settings = ({
-        id: "foamy.bolt",
-        layout: "tiles",
-        extra: "kept",
-        lowBatteryThreshold: 25
-      })
+    first.settings = shell.barSettings({
+      layout: "tiles",
+      lowBatteryThreshold: 25
+    })
     eq(field.field.text, "25", "a second external change still shows (binding intact)")
     field.field.text = "45"
     field.field.textEdited()
@@ -567,11 +699,13 @@ ShellRoot {
     field.handleKey(Qt.Key_Escape)
   }
 
-  function checkScroll() {
+  function checkScroll(next) {
     var list = shell.findByName(tallView, "listScroll")
     check(list !== null, "list has a scroll container")
-    if (!list)
+    if (!list) {
+      next()
       return
+    }
     check(list.contentHeight > list.height, "eight tiles overflow a 320 px card: " + list.contentHeight + " > " + list.height)
     eq(list.interactive, true, "overflowing list can be scrolled")
     eq(list.contentY, 0, "starts at the top")
@@ -587,6 +721,106 @@ ShellRoot {
     // it: the kit's FoamyWheelScroll does that (foamy-kit tests it).
     var wheel = tallView.listWheel
     check(!!wheel && wheel.target === list, "the list scrolls with the kit wheel handling")
+    if (!wheel) {
+      next()
+      return
+    }
+    // Opening Receiver details below the devices scrolls them into view.
+    wheel.scrollTo(0, false)
+    tallView.receiverDetails = true
+    var line = FoamyI18n.t("%1 · %2", ["Bolt Receiver", "C548"])
+    waitFor(function () {
+      var shown = shell.shownText(tallView, line)[0]
+      return !!shown && list.contentY > 0 && shown.mapToItem(list.contentItem, 0, 0).y + shown.height <= list.contentY + list.height
+    }, "opening Receiver details scrolls them into view", function () {
+      tallView.receiverDetails = false
+      wheel.scrollTo(0, false)
+      next()
+    })
+  }
+
+  // What the popup shows for each device and for no device, with the helper's
+  // status: row texts, empty states, error lines, hide without a receiver and
+  // the footer age. Nothing here saves; payload and settings are restored.
+  function rowChecks(first, view) {
+    var service = Bolt.BoltService
+    var t = FoamyI18n.t
+    var kept = service.payload
+    function rows() {
+      return shell.findAll(view, function (item) {
+        return item.device !== undefined && item.stateText !== undefined
+      })
+    }
+    function receiver() {
+      return [
+        {
+          name: "Bolt Receiver",
+          productId: "C548"
+        }
+      ]
+    }
+    first.settings = shell.barSettings({
+      showOffline: true
+    })
+    var names = rows().map(function (row) {
+      return row.Accessible.name
+    })
+    eq(JSON.stringify(names), JSON.stringify(["MX Master 3S, " + t("Low battery") + ", " + t("%1%", 12), "MX Keys S, " + t("Charging") + ", " + t("%1%", 64), "G435, " + t("Offline")]), "each row says its device, state and reading")
+    service.payload = ({
+        status: "ok",
+        receivers: [],
+        devices: [],
+        errors: []
+      })
+    eq(shell.shownText(view, t("No receiver connected")).length, 1, "no receiver: the list says so")
+    service.payload = ({
+        status: "ok",
+        receivers: receiver(),
+        devices: [],
+        errors: []
+      })
+    eq(shell.shownText(view, t("No paired devices found")).length, 1, "no paired device: the list says so")
+    first.settings = shell.barSettings({})
+    service.payload = ({
+        status: "ok",
+        receivers: receiver(),
+        devices: [
+          {
+            name: "G435",
+            online: false,
+            battery: null,
+            charging: false,
+            kindIcon: "headset"
+          }
+        ],
+        errors: []
+      })
+    eq(shell.shownText(view, t("No devices online")).length, 1, "only offline devices: the list says so")
+    service.payload = ({
+        status: "error",
+        receivers: [],
+        devices: [],
+        errors: ["Unable to read Logitech receivers."]
+      })
+    var alerts = shell.findAll(view, function (item) {
+      return item.visible && item.Accessible.role === Accessible.AlertMessage
+    })
+    eq(alerts.length ? alerts[0].text : "", t("Unable to read Logitech receivers."), "a helper error shows as a translated alert line")
+    service.payload = ({
+        status: "absent",
+        receivers: [],
+        devices: [],
+        errors: []
+      })
+    eq(panels.itemAt(1).visible, false, "no receiver: the widget hides")
+    eq(first.visible, true, "but not while its popup is open")
+    panels.itemAt(1).settings = shell.barSettings({
+      hideWhenAbsent: false
+    })
+    eq(panels.itemAt(1).visible, true, "Hide without a receiver off: it stays")
+    panels.itemAt(1).settings = shell.barSettings({})
+    service.payload = kept
+    eq(shell.shownText(view, t("Updated just now")).length, 1, "the footer says when the snapshot was taken")
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that
@@ -596,13 +830,18 @@ ShellRoot {
   function stepSolaar(next) {
     var first = panels.itemAt(0)
     first.open()
-    first.openSolaar()
+    barButton(first).pressed(Qt.RightButton)
     waitFor(function () {
       return first.launchError !== ""
     }, "the missing-Solaar error", function () {
       eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "missing Solaar explained")
       eq(first.opened, true, "the popup stays open")
-      first.openSolaar()
+      var alerts = shell.findAll(first.popup.bodyItem, function (item) {
+        return item.visible && item.Accessible.role === Accessible.AlertMessage
+      })
+      check(alerts.length > 0 && alerts[0].text.indexOf(FoamyI18n.t("Could not start Solaar.")) >= 0, "the popup shows the launch error")
+      // `o` in the popup asks again (BoltView's solaarRequested).
+      shell.key(first.popup.bodyItem, "o")
       eq(first.launchError, "", "a new check clears the error")
       waitFor(function () {
         return !first.opened
@@ -625,7 +864,7 @@ ShellRoot {
       var p = Bolt.BoltService.payload
       return Bolt.BoltService.running && leaders() === 1 && p.receivers.length > 0 && p.receivers[0].productId === "N0"
     }, "the helper starts with the bars again", function () {
-      eq(Bolt.BoltService.starts, 8, "helper starts again with the bars")
+      eq(Bolt.BoltService.starts, shell.baseStarts + 8, "helper starts again with the bars")
       eq(leaders(), 1, "one leader again")
       stepRejoin()
     })

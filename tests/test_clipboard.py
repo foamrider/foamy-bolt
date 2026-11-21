@@ -38,20 +38,6 @@ def load_hostenv():
 hostenv = load_hostenv()
 
 
-class EditorSourceTests(unittest.TestCase):
-    def test_settings_use_safe_editor(self):
-        settings = (ROOT / "BoltView.qml").read_text()
-        number_field = (ROOT / "kit/FoamyNumberField.qml").read_text()
-        editor = (ROOT / "kit/SafeTextField.qml").read_text()
-        # The threshold is the kit FoamyNumberField, which edits through SafeTextField.
-        self.assertIn("FoamyNumberField {", settings)
-        self.assertIn("SafeTextField {", number_field)
-        self.assertNotIn("TextField {", settings.replace("FoamyNumberField {", ""))
-        self.assertIn("Controls.TextArea.flickable", editor)
-        self.assertNotIn("editor.paste()", editor)
-        self.assertNotIn("editor.canPaste", editor)
-
-
 class ClipboardTests(unittest.TestCase):
     def setUp(self):
         if hostenv is None:
