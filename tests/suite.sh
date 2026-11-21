@@ -1,7 +1,7 @@
 #!/bin/bash
 # foamy-bolt's own tests; tests/validate.sh runs this after the linters.
 #   --ci    no Quickshell, no Omarchy host: node, the helper's Python tests
-#           and kit/clipboard.sh's shell cases
+#           and the kit/clipboard.sh wrapper case
 #   --fast  skip the offscreen runtime test
 set -uo pipefail
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." || exit 1
@@ -28,8 +28,8 @@ run python3 -I tests/test_logitech_events.py
 run python3 -I tests/test_logitech_status.py
 # Prints a SKIP line and passes where Solaar isn't installed (CI).
 run python3 -I tests/test_solaar_compat.py
-# kit/clipboard.sh's shell cases (hostenv.clipboard_fakes) need no host;
-# FOAMY_SUITE_CI=1 skips only the QML case, which runs Quickshell.
+# One kit/clipboard.sh case (a killed wrapper; foamy-kit's own test has the
+# rest) needs no host; FOAMY_SUITE_CI=1 skips only the QML case (Quickshell).
 if ((ci)); then
   run env FOAMY_SUITE_CI=1 python3 -I tests/test_clipboard.py
 else

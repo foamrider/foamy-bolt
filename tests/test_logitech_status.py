@@ -35,19 +35,39 @@ class LogitechStatusTest(unittest.TestCase):
         self.assertEqual(STATUS.battery_percent(Battery(140)), 100)
         self.assertEqual(STATUS.battery_percent(Battery(-5)), 0)
         self.assertIsNone(STATUS.battery_percent(Battery(None)))
+        self.assertIsNone(STATUS.battery_percent(Battery("full")))
 
-    def test_charging_state_prefers_solaar_method(self):
-        self.assertTrue(STATUS.battery_charging(Battery(75, charging=True)))
-        self.assertFalse(STATUS.battery_charging(Battery(75, charging=False)))
+    def test_charging_state_from_method_attribute_or_status_text(self):
+        def broken():
+            raise OSError("device gone")
+
+        cases = (
+            ("method True", Battery(75, charging=True), True),
+            ("method False", Battery(75, charging=False), False),
+            ("method that raises", SimpleNamespace(charging=broken), False),
+            ("attribute", SimpleNamespace(charging=True), True),
+            ("status Recharging", SimpleNamespace(status="Recharging"), True),
+            # "discharging" contains "charging".
+            ("status DISCHARGING", SimpleNamespace(status="DISCHARGING"), False),
+            ("status full", SimpleNamespace(status="full"), False),
+        )
+        for label, battery, expected in cases:
+            with self.subTest(label):
+                self.assertIs(STATUS.battery_charging(battery), expected)
 
     def test_device_kinds_are_normalized_for_the_panel(self):
         self.assertEqual(STATUS.device_kind_icon("mouse"), "mouse")
         self.assertEqual(STATUS.device_kind_icon("gaming keyboard"), "keyboard")
+        self.assertEqual(STATUS.device_kind_icon("Headset"), "headset")
         self.assertEqual(STATUS.device_kind_icon("unknown"), "device")
 
     def test_known_receiver_has_a_human_name(self):
         info = type("ReceiverInfo", (), {"product_id": "C547"})()
         self.assertEqual(STATUS.receiver_label(info), "Lightspeed Receiver")
+        self.assertEqual(STATUS.receiver_label(SimpleNamespace(product_id="c548")), "Bolt Receiver")
+        unknown = SimpleNamespace(product_id="c999", name="", product_name="Nano")
+        self.assertEqual(STATUS.receiver_label(unknown), "Nano")
+        self.assertEqual(STATUS.receiver_label(SimpleNamespace()), "Logitech receiver")
 
 
 class ReceiverQueryTest(unittest.TestCase):
@@ -110,6 +130,37 @@ class ReceiverQueryTest(unittest.TestCase):
         )
         self.assertIn("Unable to close receiver.", result["errors"])
 
+    def test_status_follows_receivers_devices_and_errors(self):
+        # The status drives the urgent bar and the popup's error lines.
+        def api(receivers, create_receiver=lambda _base, _info: None):
+            return SimpleNamespace(
+                base=SimpleNamespace(receivers=receivers), receiver=SimpleNamespace(create_receiver=create_receiver)
+            )
+
+        result = STATUS._snapshot(api(lambda: []), {})
+        self.assertEqual((result["status"], result["errors"]), ("absent", []))
+
+        def unreadable():
+            raise OSError("/dev/hidraw3")
+
+        result = STATUS._snapshot(api(unreadable), {})
+        self.assertEqual((result["status"], result["errors"]), ("error", [STATUS.READ_ERROR]))
+        self.assertNotIn("/dev/hidraw3", str(result))
+
+        info = SimpleNamespace(product_id="C548", path="/dev/hidraw4")
+        result = STATUS._snapshot(api(lambda: [info]), {})
+        self.assertEqual((result["status"], result["errors"]), ("error", [STATUS.OPEN_ERROR]))
+        self.assertEqual(result["receivers"], [{"name": "Bolt Receiver", "productId": "C548"}])
+
+        def battery():
+            raise OSError("private hardware path")
+
+        two = [SimpleNamespace(name=name, kind="mouse", ping=lambda: True, battery=battery) for name in ("A", "B")]
+        receiver = type("Receiver", (), {"__iter__": lambda self: iter(two), "close": lambda self: None})()
+        result = STATUS._snapshot(api(lambda: [info], lambda _base, _info: receiver), {})
+        self.assertEqual(len(result["devices"]), 2)
+        self.assertEqual(result["errors"], [STATUS.DEVICE_ERROR], "one line per error, not per device")
+
     def test_borrowed_listener_receiver_is_used_under_its_guard_and_not_closed(self):
         events = []
 
@@ -162,11 +213,24 @@ class QueryLockTest(unittest.TestCase):
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
 
-    def test_busy_lock_becomes_a_clear_payload_error(self):
-        api = SimpleNamespace(base=SimpleNamespace(receivers=lambda: []))
-        with patch.object(STATUS, "query_lock", side_effect=STATUS.LockTimeout):
-            result = STATUS.snapshot(api)
+    def test_busy_lock_becomes_a_clear_payload_error_without_hardware_access(self):
+        # Another foamy-bolt process holds the real lock: no HID++ traffic,
+        # a clear error instead.
+        calls = []
+        api = SimpleNamespace(base=SimpleNamespace(receivers=lambda: calls.append(1) or []))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "foamy-bolt" / "query.lock"
+            holder = subprocess.Popen([sys.executable, "-c", HOLD, str(path)], stdout=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(holder.stdout.readline().strip(), "held")
+                with patch.dict(os.environ, {"XDG_RUNTIME_DIR": directory}):
+                    result = STATUS.snapshot(api, lock_timeout=0.3)
+            finally:
+                holder.kill()
+                holder.wait()
+                holder.stdout.close()
         self.assertEqual((result["status"], result["errors"]), ("error", [STATUS.BUSY_ERROR]))
+        self.assertEqual(calls, [], "no receiver was read while the lock was held")
 
     def test_unusable_lock_location_fails_open(self):
         with tempfile.TemporaryDirectory() as directory:

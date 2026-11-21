@@ -3,6 +3,9 @@ import io
 import json
 import os
 from pathlib import Path
+import queue
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -19,6 +22,14 @@ SPEC = importlib.util.spec_from_file_location("logitech_events", HELPER)
 EVENTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVENTS)
 STATUS = EVENTS.STATUS
+# The desktop session stays out of every process a test starts.
+DESKTOP_VARIABLES = ("WAYLAND_DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "DISPLAY")
+
+
+def isolated_env(**extra):
+    env = {name: value for name, value in os.environ.items() if name not in DESKTOP_VARIABLES}
+    env.update(extra)
+    return env
 
 
 class EventFilterTest(unittest.TestCase):
@@ -125,6 +136,11 @@ class EventFilterTest(unittest.TestCase):
         self.assertTrue(changes.accept(self.event(7), {1: self.device}))
         self.assertFalse(changes.accept(self.event(7), {1: self.device}))
         self.assertTrue(changes.accept(self.event(7, data=b"\x30\x00\x00"), {1: self.device}))
+        # A slot that goes offline forgets its readings: after it comes back,
+        # the same reading is news again.
+        changes.accept(self.event(0x41, data=b"\x72\x9f\x40"), {1: self.device})
+        changes.accept(self.event(0x41), {1: self.device})
+        self.assertTrue(changes.accept(self.event(7, data=b"\x30\x00\x00"), {1: self.device}))
 
     def test_unpair_without_private_device_cache_still_refreshes(self):
         receiver = SimpleNamespace()  # a Solaar release that renamed _devices
@@ -221,6 +237,8 @@ class HelperTest(unittest.TestCase):
         health = next(x for x in emitter.events if x["event"] == "health")
         self.assertEqual(health["error"], EVENTS.WATCH_ERROR)
         self.assertEqual(health["detail"], "Solaar 9.9: missing listener.EventsListener")
+        self.assertTrue(emitter.wait(lambda e: any(x["event"] == "status" for x in e)), "snapshots still come")
+        self.assertEqual(emitter.statuses()[0]["payload"]["status"], "absent")
         helper.stop()
         thread.join(5)
         self.assertEqual(self.rc, 0)
@@ -359,83 +377,264 @@ class HelperTest(unittest.TestCase):
         helper = EVENTS.Helper(poll_only_api(), FakeEmitter())
         ready = SimpleNamespace(ready=True, failed=False, is_alive=lambda: True, receiver="r1", guard="g1")
         starting = SimpleNamespace(ready=False, failed=False, is_alive=lambda: True, receiver="r2", guard="g2")
-        helper.listeners = {"/a": ready, "/b": starting}
+        failed = SimpleNamespace(ready=True, failed=True, is_alive=lambda: True, receiver="r3", guard="g3")
+        ended = SimpleNamespace(ready=True, failed=False, is_alive=lambda: False, receiver="r4", guard="g4")
+        helper.listeners = {"/a": ready, "/b": starting, "/c": failed, "/d": ended}
         self.assertEqual(helper.borrowed(), {"/a": ("r1", "g1")})
+
+    def test_query_that_hangs_reports_busy_then_ends_the_helper(self):
+        # A Solaar call that never returns: past BUSY_LIMIT the helper says so
+        # in a status line, then ends (main() exits 1 and the shell restarts it).
+        emitter = FakeEmitter()
+        gate = threading.Event()
+        querying = threading.Event()
+
+        def receivers():
+            querying.set()
+            gate.wait(5)
+            return []
+
+        api = poll_only_api()
+        api.base.receivers = receivers
+        # The limit compares the helper's clock with the worker's busy_since
+        # (time.monotonic): a skewed clock moves past it without waiting.
+        skew = [0.0]
+        helper = EVENTS.Helper(api, emitter, clock=lambda: time.monotonic() + skew[0])
+        outcome = {}
+
+        def run():
+            try:
+                outcome["rc"] = helper.run()
+            except Exception as error:
+                outcome["error"] = error
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        self.addCleanup(self.wait_idle, helper)
+        # Registered after wait_idle, so it runs first: the blocked query ends.
+        self.addCleanup(gate.set)
+        self.assertTrue(querying.wait(5), "the query started")
+        skew[0] = EVENTS.BUSY_LIMIT + 1
+        helper.request()  # wake the loop so it checks its limits now
+        thread.join(5)
+        self.assertFalse(thread.is_alive(), "the helper ended")
+        self.assertIsInstance(outcome.get("error"), RuntimeError, outcome)
+        busy = [s["payload"] for s in emitter.statuses() if s["payload"]["errors"] == [STATUS.BUSY_ERROR]]
+        self.assertEqual(len(busy), 1, f"one timed-out status before the end: {emitter.statuses()}")
+        self.assertEqual(busy[0]["status"], "error")
+
+
+# Reads helper stdout lines on stdin and prints what the shell's
+# Model.parseEvent makes of each, as JSON. Model.js comes in as argv[1].
+PARSE_EVENTS = r"""
+const M = require(process.argv[1]);
+const lines = require('node:fs').readFileSync(0, 'utf8').split('\n').filter(Boolean);
+const parsed = lines.map(line => {
+  try { return { event: M.parseEvent(line) }; } catch (error) { return { error: String(error), line }; }
+});
+console.log(JSON.stringify({ parsed, eventError: M.eventError, exitUnavailable: M.exitUnavailable }));
+"""
+STRAY_PRINTS = {
+    "__init__.py": "print('noise from solaar')\n",
+    "base.py": "def receivers():\n    print('more noise')\n    return []\n",
+    "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
+}
+MISSING_SOLAAR = {"__init__.py": "raise ImportError('no solaar')\n"}
 
 
 class HelperProcessTest(unittest.TestCase):
     """The real script in a subprocess against a fake Solaar package."""
 
-    def run_helper(self, files, timeout=10):
-        with tempfile.TemporaryDirectory() as directory:
-            package = Path(directory) / "logitech_receiver"
-            package.mkdir()
-            for name, text in files.items():
-                (package / name).write_text(text)
-            env = dict(os.environ, PYTHONPATH=directory, XDG_RUNTIME_DIR=directory)
-            process = subprocess.Popen(
-                [sys.executable, str(HELPER)],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                env=env,
-                text=True,
-            )
-            events = []
+    def start_helper(self, files):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        package = Path(directory.name) / "logitech_receiver"
+        package.mkdir()
+        for name, text in files.items():
+            (package / name).write_text(text)
+        env = isolated_env(PYTHONPATH=directory.name, XDG_RUNTIME_DIR=directory.name)
+        process = subprocess.Popen(
+            [sys.executable, str(HELPER)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            text=True,
+        )
+        # A reader thread feeds a queue, so that every wait for a line has a
+        # deadline, also when the helper starts but never prints.
+        output = queue.Queue()
+
+        def read():
+            for line in process.stdout:
+                output.put(line)
+            output.put("")  # end of output
+
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
+
+        def stop():
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            reader.join(5)
+            process.stdout.close()
             try:
-                # Two snapshots (start, then `refresh`), then close stdin as the shell would.
-                deadline = time.monotonic() + timeout
-                while time.monotonic() < deadline:
-                    line = process.stdout.readline()
-                    if not line:
-                        break
-                    events.append(json.loads(line))
-                    statuses = len([e for e in events if e["event"] == "status"])
-                    if statuses == 1 and events[-1]["event"] == "status":
-                        try:
-                            process.stdin.write("refresh\n")
-                            process.stdin.flush()
-                        except BrokenPipeError:
-                            pass  # exit-code cases stop on their own
-                    if statuses == 2:
-                        break
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+
+        # Registered after the directory's cleanup, so it runs first.
+        self.addCleanup(stop)
+        return process, output
+
+    def next_line(self, output, deadline):
+        """The helper's next stdout line, or "" at the end of its output."""
+        try:
+            return output.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty:
+            self.fail("no line from the helper before the deadline")
+
+    def run_helper(self, files, timeout=10):
+        """Exit code, events and raw stdout lines of one run: two snapshots
+        (start, then `refresh`), then stdin closed as the shell would."""
+        process, output = self.start_helper(files)
+        lines = []
+        deadline = time.monotonic() + timeout
+        while line := self.next_line(output, deadline):
+            lines.append(line)
+            events = [json.loads(raw) for raw in lines]
+            statuses = len([e for e in events if e["event"] == "status"])
+            if statuses == 1 and events[-1]["event"] == "status":
                 try:
-                    process.stdin.close()
+                    process.stdin.write("refresh\n")
+                    process.stdin.flush()
                 except BrokenPipeError:
-                    pass
-                events += [json.loads(line) for line in process.stdout.read().splitlines()]
-                return process.wait(timeout), events
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                    process.wait()
-                process.stdout.close()
+                    pass  # exit-code cases stop on their own
+            if statuses == 2:
+                break
+        try:
+            process.stdin.close()
+        except BrokenPipeError:
+            pass
+        # The rest of the output, unless it already ended.
+        while line and (line := self.next_line(output, deadline)):
+            lines.append(line)
+        return process.wait(timeout), [json.loads(raw) for raw in lines], lines
+
+    def parse_in_shell_model(self, lines):
+        node = shutil.which("node")
+        # tests/suite.sh needs node for its other tests too: none is a failure, not a skip.
+        self.assertIsNotNone(node, "node is needed to run the shell's parser (Model.js)")
+        result = subprocess.run(
+            [node, "-e", PARSE_EVENTS, str(HELPER.with_name("Model.js"))],
+            input="".join(lines),
+            env=isolated_env(),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
 
     def test_stray_prints_never_reach_the_protocol_and_eof_stops(self):
-        rc, events = self.run_helper(
-            {
-                "__init__.py": "print('noise from solaar')\n",
-                "base.py": "def receivers():\n    print('more noise')\n    return []\n",
-                "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
-            }
-        )
+        rc, events, _ = self.run_helper(STRAY_PRINTS)
         self.assertEqual(rc, 0)
         statuses = [e for e in events if e["event"] == "status"]
         self.assertEqual(len(statuses), 2)
         self.assertTrue(all(s["payload"]["status"] == "absent" for s in statuses))
 
+    def test_sigterm_stops_the_helper_with_exit_0(self):
+        # BoltService.stop() ends the helper with SIGTERM, stdin still open.
+        process, output = self.start_helper(STRAY_PRINTS)
+        deadline = time.monotonic() + 10
+        first = json.loads(self.next_line(output, deadline) or "{}")
+        while first.get("event") == "health":
+            first = json.loads(self.next_line(output, deadline) or "{}")
+        self.assertEqual(first.get("event"), "status", "the helper started")
+        process.send_signal(signal.SIGTERM)
+        # A signal that lands just before the helper's select() is seen only at
+        # the helper's next deadline, the heartbeat at the latest (about one
+        # run in 40 here). The wait covers that case. With the signal tied to
+        # the helper's wake-up pipe (signal.set_wakeup_fd) it can be short.
+        self.assertEqual(process.wait(EVENTS.HEALTH_EVERY + 5), 0)
+
     def test_moved_snapshot_api_exits_for_backoff_with_a_clear_error(self):
-        rc, events = self.run_helper({"__init__.py": "", "base.py": "", "receiver.py": ""})
+        rc, events, _ = self.run_helper({"__init__.py": "", "base.py": "", "receiver.py": ""})
         self.assertEqual(rc, EVENTS.EXIT_UNAVAILABLE)
         self.assertEqual(events[0]["payload"]["errors"], [STATUS.UNSUPPORTED_ERROR])
         self.assertIn("base.receivers", events[1]["detail"])
         self.assertIn("receiver.create_receiver", events[1]["detail"])
 
     def test_missing_solaar_exits_for_backoff(self):
-        rc, events = self.run_helper({"__init__.py": "raise ImportError('no solaar')\n"})
+        rc, events, _ = self.run_helper(MISSING_SOLAAR)
         self.assertEqual(rc, EVENTS.EXIT_UNAVAILABLE)
         self.assertEqual(events[0]["payload"]["status"], "unavailable")
         self.assertEqual(events[0]["payload"]["errors"], [STATUS.MISSING_ERROR])
+
+    def test_helper_lines_are_what_the_shell_model_accepts(self):
+        # Both sides of the protocol: the real helper's stdout through the
+        # shell's own parser, not hand-written JSON on either side.
+        files = {
+            "__init__.py": "",
+            "base.py": (
+                "from types import SimpleNamespace\n"
+                "def receivers():\n"
+                "    return [SimpleNamespace(path='/dev/hidraw-fake', product_id='c548')]\n"
+            ),
+            # No listener module: the helper also reports its event error.
+            "receiver.py": (
+                "class Battery:\n"
+                "    level = 55\n"
+                "    def charging(self):\n"
+                "        return True\n"
+                "class Device:\n"
+                "    name = 'MX \u00dcn\u00efcode'\n"
+                "    kind = 'mouse'\n"
+                "    def ping(self):\n"
+                "        return True\n"
+                "    def battery(self):\n"
+                "        return Battery()\n"
+                "class Receiver:\n"
+                "    def __iter__(self):\n"
+                "        return iter([Device()])\n"
+                "    def close(self):\n"
+                "        pass\n"
+                "def create_receiver(low_level, info):\n"
+                "    return Receiver()\n"
+            ),
+        }
+        rc, _, lines = self.run_helper(files)
+        self.assertEqual(rc, 0)
+        model = self.parse_in_shell_model(lines)
+        rejected = [p for p in model["parsed"] if "error" in p]
+        self.assertEqual(rejected, [], "every helper line is valid shell input")
+        statuses = [p["event"]["payload"] for p in model["parsed"] if p["event"]["event"] == "status"]
+        self.assertEqual(len(statuses), 2)
+        self.assertEqual(statuses[0]["status"], "ok")
+        self.assertEqual(
+            statuses[0]["devices"],
+            [
+                {
+                    "name": "MX \u00dcn\u00efcode",
+                    "online": True,
+                    "battery": 55,
+                    "charging": True,
+                    "kindIcon": "mouse",
+                    "receiver": "Bolt Receiver",
+                }
+            ],
+        )
+        self.assertEqual(statuses[0]["receivers"], [{"name": "Bolt Receiver", "productId": "C548"}])
+        health = [p["event"] for p in model["parsed"] if p["event"]["event"] == "health"]
+        self.assertTrue(health, "a health line")
+        self.assertEqual(health[0]["error"], model["eventError"])
+
+        rc, _, lines = self.run_helper(MISSING_SOLAAR)
+        model = self.parse_in_shell_model(lines)
+        self.assertEqual([p for p in model["parsed"] if "error" in p], [], "missing-Solaar lines are valid shell input")
+        self.assertEqual(model["parsed"][0]["event"]["payload"]["status"], "unavailable")
+        self.assertEqual(rc, model["exitUnavailable"], "the shell's backoff knows this exit code")
 
 
 if __name__ == "__main__":
