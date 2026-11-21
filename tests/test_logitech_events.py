@@ -553,7 +553,11 @@ class HelperProcessTest(unittest.TestCase):
             first = json.loads(self.next_line(output, deadline) or "{}")
         self.assertEqual(first.get("event"), "status", "the helper started")
         process.send_signal(signal.SIGTERM)
-        self.assertEqual(process.wait(5), 0)
+        # A signal that lands just before the helper's select() is seen only at
+        # the helper's next deadline, the heartbeat at the latest (about one
+        # run in 40 here). The wait covers that case. With the signal tied to
+        # the helper's wake-up pipe (signal.set_wakeup_fd) it can be short.
+        self.assertEqual(process.wait(EVENTS.HEALTH_EVERY + 5), 0)
 
     def test_moved_snapshot_api_exits_for_backoff_with_a_clear_error(self):
         rc, events, _ = self.run_helper({"__init__.py": "", "base.py": "", "receiver.py": ""})
