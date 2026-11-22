@@ -6,23 +6,12 @@ BoltService.qml: import: Type BoltService not declared as singleton in qmldir bu
 BoltService.qml: incompatible-type: Cannot assign binding of type QVariantMap to QVariantHash | environment: ({
 BoltView.qml: block-scope-var-declaration: var declaration in block scope is hoisted to function scope | for (var i = 0; i < Schema.fields.length; i++) {
 BoltView.qml: block-scope-var-declaration: var declaration in block scope is hoisted to function scope | var field = Schema.fields[i]
-BoltView.qml: missing-property: Member "body" not found on type "QObject" | font.pixelSize: FoamyStyle.font.body
-BoltView.qml: missing-property: Member "body" not found on type "QObject" | font.pixelSize: FoamyStyle.font.body
-BoltView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
-BoltView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
 BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
 BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
 BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
 BoltView.qml: unqualified: Unqualified access | Layout.preferredWidth: (deviceGrid.width - deviceGrid.columnSpacing * (deviceGrid.columns - 1)) / deviceGrid.columns
 BoltView.qml: unqualified: Unqualified access | threshold: root.setting("lowBatteryThreshold")
 BoltView.qml: unqualified: Unqualified access | tile: root.layout === "tiles"
-DeviceView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
-DeviceView.qml: missing-property: Member "bodySmall" not found on type "QObject" | font.pixelSize: FoamyStyle.font.bodySmall
-DeviceView.qml: missing-property: Member "displayLarge" not found on type "QObject" | font.pixelSize: FoamyStyle.font.displayLarge
-DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
-DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
-DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
-DeviceView.qml: missing-property: Member "subtitle" not found on type "QObject" | font.pixelSize: FoamyStyle.font.subtitle
 Panel.qml: id-shadows-member: Id for object FoamyMember shadows property "member". Rename one or the other. | leader: member.isLeader,
 Panel.qml: id-shadows-member: Id for object FoamyPopup shadows property "popup". Rename one or the other. | if (popup.bodyItem && root.editingSettings)
 Panel.qml: id-shadows-member: Id for object FoamyPrefsQueue shadows property "prefs". Rename one or the other. | readonly property var preferences: prefs.values()
