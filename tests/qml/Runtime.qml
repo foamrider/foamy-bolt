@@ -1017,14 +1017,15 @@ ShellRoot {
     }, "the fake ignores SIGTERM", function () {
       service.wantedChanged.connect(rejoin)
       panels.model = 0
+      // The new run's first snapshot is N0 (the stuck run's Nstuck stays until then).
       waitFor(function () {
-        return state.rejoined && service.running && service.starts === startsBefore + 1 && service.payload.status === "ok"
-      }, "the stuck helper is stopped and the bars get a new one", function () {
+        var p = service.payload
+        return state.rejoined && service.running && service.starts === startsBefore + 1 && p.status === "ok" && p.receivers.length > 0 && p.receivers[0].productId === "N0"
+      }, "the stuck helper is stopped and the bars get readings from a new one", function () {
         eq(state.exiting, true, "new bars joined while the stuck helper was still running")
         eq(service.starts, startsBefore + 1, "started once more")
         eq(service.failures, 0, "a requested stop is not a failure")
         eq(service.waiting, false, "no backoff pending")
-        eq(service.payload.receivers[0].productId, "N0", "readings from the new helper")
         finish()
       })
     })
