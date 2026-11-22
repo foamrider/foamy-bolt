@@ -42,12 +42,14 @@ Item {
     }
   ]
   readonly property bool overflow: previewState.indexOf("overflow") === 0
-  readonly property var many: ["MX Master 3S", "MX Keys S", "MX Anywhere 3", "Lift", "Ergo K860", "POP Mouse", "G502 X", "G915 TKL"].map(function (name, i) {
+  // Six rows of tiles: taller than the card can grow on a 1920x1080 screen,
+  // so the overflow states show a list that scrolls.
+  readonly property var many: ["MX Master 3S", "MX Keys S", "MX Anywhere 3", "Lift", "Ergo K860", "POP Mouse", "G502 X", "G915 TKL", "Signature M650", "K380", "MX Ergo", "MX Mechanical Mini"].map(function (name, i) {
     return {
       name: name,
       kindIcon: i % 2 ? "keyboard" : "mouse",
       online: true,
-      battery: 90 - i * 9,
+      battery: 90 - i * 7,
       charging: false
     }
   })
