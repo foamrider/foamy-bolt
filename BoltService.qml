@@ -44,9 +44,10 @@ QtObject {
   // Unterminated stdout of this run, at most Model.maxLineLength characters.
   property string pendingOutput: ""
   // stop() asked this run to end. Quickshell keeps `running` true until the
-  // helper has exited (up to a second while Solaar's listeners stop), so a
-  // bar that rejoins meanwhile (the bar reloads) can't start it; its exit
-  // starts the next run instead of counting as a failure.
+  // helper has exited (up to a second while Solaar's listeners stop, killed
+  // by stopTimer if it doesn't), so a bar that rejoins meanwhile (the bar
+  // reloads) can't start it; its exit starts the next run instead of
+  // counting as a failure.
   property bool stopRequested: false
   readonly property bool running: helper.running
   readonly property bool waiting: restartTimer.running
@@ -84,6 +85,7 @@ QtObject {
       return
     stopRequested = true
     helper.running = false
+    stopTimer.start()
   }
 
   // force: the user asked (Refresh, IPC), so a helper waiting out its
@@ -165,6 +167,7 @@ QtObject {
     discardOutput = false
     pendingOutput = ""
     watchdog.stop()
+    stopTimer.stop()
     refreshing = false
     lastExitCode = code
     if (!wanted)
@@ -224,6 +227,15 @@ QtObject {
       service.eventError = Model.eventError
       service.abortRun()
     }
+  }
+
+  // SIGTERM is handled by the helper's main thread, which a stuck Solaar
+  // call holds; listeners take up to 2 s each to stop. Past this the helper
+  // is killed, or it would keep running and block every later start.
+  property Timer stopTimer: Timer {
+    interval: 5000
+    onTriggered: if (service.helper.running)
+      service.helper.signal(9)
   }
 
   property Timer poll: Timer {

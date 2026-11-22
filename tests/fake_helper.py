@@ -4,7 +4,8 @@ with canned devices and never touches hardware. Each start appends a line to
 $FOAMY_BOLT_STARTS; `fail` sends an error snapshot and exits 1; `hang` stops
 answering (a stalled helper for the watchdog); `flood` writes an endless
 line; `stderr` writes 128 MiB of log noise to stderr; `slowstop` makes SIGTERM
-take half a second, as the real helper's listener shutdown can. The receiver's productId
+take half a second, as the real helper's listener shutdown can; `stuck` ignores SIGTERM
+and stops answering, as a helper stuck in a Solaar call does. The receiver's productId
 counts `refresh` commands and its name says whether DISPLAY/WAYLAND_DISPLAY
 reached the helper."""
 
@@ -78,6 +79,11 @@ for line in sys.stdin:
             sys.stdout.flush()
     elif line.strip() == "slowstop":  # test hook: exit 0.5 s after SIGTERM
         signal.signal(signal.SIGTERM, lambda *_: (time.sleep(0.5), os._exit(0)))
+    elif line.strip() == "stuck":  # test hook: deaf to SIGTERM and silent, until killed
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        status("stuck")
+        while True:
+            time.sleep(60)
     elif line.strip() == "stderr":  # test hook: log noise the shell must not keep
         for _ in range(2048):
             sys.stderr.write("x" * 65535 + "\n")

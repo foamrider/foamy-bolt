@@ -13,8 +13,8 @@ import "plugin/kit"
 // device rows and empty states, settings saving through the bar, backoff and
 // restart (also after a helper that can't start, stalls or floods its
 // output), teardown when the last instance goes, a bar reload while the
-// stopped helper is still exiting, opening Solaar, translations, plurals and
-// RTL mirroring.
+// stopped helper is still exiting or ignores SIGTERM, opening Solaar,
+// translations, plurals and RTL mirroring.
 //
 // FOAMY_SCENARIO=full (tests/runtime.py's English run) first starts the real
 // logitech_events.py with BoltService's default command against a fake
@@ -942,6 +942,46 @@ ShellRoot {
         eq(service.failures, 0, "a requested stop is not a failure")
         eq(service.waiting, false, "no backoff pending")
         eq(service.payload.status, "ok", "readings, not the stopped-helper error")
+        stepStuckStop()
+      })
+    })
+  }
+
+  // A helper whose main thread is stuck (in a Solaar call) never handles
+  // SIGTERM. The stop is made certain after a deadline, so bars that come
+  // back while it hangs get a new helper instead of waiting for ever.
+  function stepStuckStop() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    var state = {
+      rejoined: false,
+      exiting: false
+    }
+    function rejoin() {
+      if (service.wanted || state.rejoined)
+        return
+      state.rejoined = true
+      service.wantedChanged.disconnect(rejoin)
+      Qt.callLater(function () {
+        state.exiting = service.running
+        panels.model = 3
+      })
+    }
+    service.stopTimer.interval = 300
+    service.helper.write("stuck\n")
+    waitFor(function () {
+      return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "Nstuck"
+    }, "the fake ignores SIGTERM", function () {
+      service.wantedChanged.connect(rejoin)
+      panels.model = 0
+      waitFor(function () {
+        return state.rejoined && service.running && service.starts === startsBefore + 1 && service.payload.status === "ok"
+      }, "the stuck helper is stopped and the bars get a new one", function () {
+        eq(state.exiting, true, "new bars joined while the stuck helper was still running")
+        eq(service.starts, startsBefore + 1, "started once more")
+        eq(service.failures, 0, "a requested stop is not a failure")
+        eq(service.waiting, false, "no backoff pending")
+        eq(service.payload.receivers[0].productId, "N0", "readings from the new helper")
         finish()
       })
     })

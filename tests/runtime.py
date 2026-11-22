@@ -208,9 +208,9 @@ def run(host, lang, scenario):
     elif full and end - start > 64 * 1024:
         failures.append(f"FOAMY FAIL 128 MiB of helper stderr kept in the shell: RSS {start} -> {end} KiB")
     # The fake's starts: start, restart, after an error, after a failed start,
-    # after a stall, after a flood, re-add, reload. The real helper's first
-    # run writes no line.
-    expected = 8 if full else 1
+    # after a stall, after a flood, re-add, reload, reload with a helper that
+    # ignores SIGTERM. The real helper's first run writes no line.
+    expected = 9 if full else 1
     if helpers != expected:
         failures.append(f"FOAMY FAIL fake helper processes started: {helpers}, expected {expected}")
     ok = "FOAMY DONE" in log and not failures
