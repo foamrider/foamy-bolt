@@ -858,9 +858,10 @@ ShellRoot {
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that
-  // reports it missing first, then present; tests/runtime.py checks what ran):
-  // missing explains itself and keeps the popup, present launches it through
-  // uwsm-app (a fake as well) and closes.
+  // reports it missing first, then hangs, then reports it present;
+  // tests/runtime.py checks what ran): missing explains itself and keeps the
+  // popup, a hung check ends at its deadline with the same error, present
+  // launches it through uwsm-app (a fake as well) and closes.
   function stepSolaar(next) {
     var first = panels.itemAt(0)
     first.open()
@@ -878,11 +879,19 @@ ShellRoot {
       shell.key(first.popup.bodyItem, "o")
       eq(first.launchError, "", "a new check clears the error")
       waitFor(function () {
-        return !first.opened
-      }, "Solaar opens and the popup closes", function () {
-        eq(first.opened, false, "Solaar found: the popup closes")
-        eq(first.launchError, "", "and no error")
-        next()
+        return first.launchError !== ""
+      }, "the hung check ends at its deadline", function () {
+        eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "a hung check is explained")
+        eq(first.opened, true, "the popup stays open")
+        shell.key(first.popup.bodyItem, "o")
+        eq(first.launchError, "", "the next check starts")
+        waitFor(function () {
+          return !first.opened
+        }, "Solaar opens and the popup closes", function () {
+          eq(first.opened, false, "Solaar found: the popup closes")
+          eq(first.launchError, "", "and no error")
+          next()
+        })
       })
     })
   }

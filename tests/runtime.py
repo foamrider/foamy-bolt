@@ -41,10 +41,13 @@ sys.path.insert(0, str(KIT / "preview"))
 import harness  # noqa: E402
 
 
-# Reports solaar missing on the first check and present after; logs its arguments.
+# Reports solaar missing on the first check, hangs on the second until it is
+# killed and reports it present after; logs its arguments.
 FAKE_CMD_PRESENT = """#!/bin/sh
 printf '%s\\n' "$*" >> "$FOAMY_BOLT_CMD_LOG"
-[ "$(wc -l < "$FOAMY_BOLT_CMD_LOG")" -gt 1 ]
+calls=$(wc -l < "$FOAMY_BOLT_CMD_LOG")
+if [ "$calls" -eq 2 ]; then exec sleep 600; fi
+[ "$calls" -gt 2 ]
 """
 FAKE_SOLAAR = """#!/bin/sh
 printf 'launched %s\\n' "$*" >> "$FOAMY_BOLT_SOLAAR_LOG"
@@ -193,9 +196,9 @@ def run(host, lang, scenario):
     failures += ipc_failures(status)
     helpers = len(starts.read_text().split()) if starts.exists() else 0
     failures += [f"FOAMY FAIL host command tried: {line}" for line in r.host_commands()]
-    # Solaar is checked twice (missing, then present) and launched once, through
-    # uwsm-app as the host launches apps, never directly.
-    launches = (("cmd-present.log", "solaar\nsolaar\n"), ("uwsm-app.log", "-- solaar\n"), ("solaar.log", ""))
+    # Solaar is checked three times (missing, hung, then present) and launched
+    # once, through uwsm-app as the host launches apps, never directly.
+    launches = (("cmd-present.log", "solaar\nsolaar\nsolaar\n"), ("uwsm-app.log", "-- solaar\n"), ("solaar.log", ""))
     for name, expected_text in launches:
         expected_text = expected_text if full else ""
         found = (r.base / name).read_text() if (r.base / name).exists() else ""
