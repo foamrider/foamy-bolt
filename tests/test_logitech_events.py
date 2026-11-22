@@ -440,12 +440,21 @@ STRAY_PRINTS = {
     "receiver.py": "def create_receiver(low_level, info):\n    return None\n",
 }
 MISSING_SOLAAR = {"__init__.py": "raise ImportError('no solaar')\n"}
+# Runs the helper script (argv[1]) with SIGTERM blocked in the main thread and
+# every thread it starts, so the kernel delivers the signal to one spare thread.
+SIGNAL_ON_OTHER_THREAD = """
+import runpy, signal, sys, threading
+threading.Thread(target=threading.Event().wait, daemon=True).start()
+signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
 
 
 class HelperProcessTest(unittest.TestCase):
     """The real script in a subprocess against a fake Solaar package."""
 
-    def start_helper(self, files):
+    def start_helper(self, files, launcher=None):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         package = Path(directory.name) / "logitech_receiver"
@@ -453,8 +462,9 @@ class HelperProcessTest(unittest.TestCase):
         for name, text in files.items():
             (package / name).write_text(text)
         env = isolated_env(PYTHONPATH=directory.name, XDG_RUNTIME_DIR=directory.name)
+        command = [sys.executable, str(HELPER)] if launcher is None else [sys.executable, "-c", launcher, str(HELPER)]
         process = subprocess.Popen(
-            [sys.executable, str(HELPER)],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -553,11 +563,21 @@ class HelperProcessTest(unittest.TestCase):
             first = json.loads(self.next_line(output, deadline) or "{}")
         self.assertEqual(first.get("event"), "status", "the helper started")
         process.send_signal(signal.SIGTERM)
-        # A signal that lands just before the helper's select() is seen only at
-        # the helper's next deadline, the heartbeat at the latest (about one
-        # run in 40 here). The wait covers that case. With the signal tied to
-        # the helper's wake-up pipe (signal.set_wakeup_fd) it can be short.
-        self.assertEqual(process.wait(EVENTS.HEALTH_EVERY + 5), 0)
+        self.assertEqual(process.wait(5), 0)
+
+    def test_sigterm_that_misses_the_main_thread_still_stops_the_helper_quickly(self):
+        # The signal lands where the main thread's select() is not interrupted,
+        # as it does when it arrives just before select() blocks: only the
+        # wake-up pipe can end the wait before the heartbeat.
+        process, output = self.start_helper(STRAY_PRINTS, launcher=SIGNAL_ON_OTHER_THREAD)
+        deadline = time.monotonic() + 10
+        first = json.loads(self.next_line(output, deadline) or "{}")
+        while first.get("event") == "health":
+            first = json.loads(self.next_line(output, deadline) or "{}")
+        self.assertEqual(first.get("event"), "status", "the helper started")
+        process.send_signal(signal.SIGTERM)
+        self.assertLess(3, EVENTS.HEALTH_EVERY, "the wait must be shorter than the heartbeat")
+        self.assertEqual(process.wait(3), 0)
 
     def test_moved_snapshot_api_exits_for_backoff_with_a_clear_error(self):
         rc, events, _ = self.run_helper({"__init__.py": "", "base.py": "", "receiver.py": ""})

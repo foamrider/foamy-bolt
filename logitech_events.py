@@ -441,6 +441,10 @@ def main() -> int:
         return 1
 
     helper = Helper(api, emitter, stdin=sys.stdin)
+    # The Python handlers run only after select() returns. A signal that lands
+    # just before select() blocks, or on another thread, still has to end the
+    # wait: the interpreter's C-level handler writes to the wake-up pipe.
+    signal.set_wakeup_fd(helper.wakeup.write_fd)
     signal.signal(signal.SIGTERM, lambda *_: helper.stop())
     signal.signal(signal.SIGINT, lambda *_: helper.stop())
     try:
