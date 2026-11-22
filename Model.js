@@ -14,6 +14,9 @@ function lowestBattery(devices) {
 }
 function loadingPayload() { return {status:"loading",receivers:[],devices:[],errors:[]} }
 function errorPayload(message) { return {status:"error",receivers:[],devices:[],errors:[message]} }
+// Device and receiver names come from the hardware and show on one line
+// (rows, tiles, tooltips): a line break in one becomes a space.
+function oneLine(text) { return text.replace(/[\r\n\u2028\u2029]+/g," ") }
 // Accepts the helper's payload object (or its JSON text) and returns a bounded copy.
 function parsePayload(raw) {
   var p=typeof raw==="string" ? JSON.parse(raw) : raw
@@ -24,12 +27,12 @@ function parsePayload(raw) {
     updatedAt:typeof p.updatedAt==="number" && isFinite(p.updatedAt) ? p.updatedAt : 0,
     devices:p.devices.map(function(d) {
       if (!d || typeof d.name!=="string" || typeof d.online!=="boolean") throw new Error("Invalid device")
-      return {name:d.name.slice(0,200),online:d.online,battery:battery(d.battery),charging:d.charging===true,
+      return {name:oneLine(d.name.slice(0,200)),online:d.online,battery:battery(d.battery),charging:d.charging===true,
         kindIcon:["mouse","keyboard","headset"].indexOf(d.kindIcon)>=0 ? d.kindIcon : "device",receiver:String(d.receiver || "").slice(0,200)}
     }),
     receivers:p.receivers.map(function(r) {
       if (!r || typeof r.name!=="string") throw new Error("Invalid receiver")
-      return {name:r.name.slice(0,200),productId:String(r.productId || "").slice(0,20)}
+      return {name:oneLine(r.name.slice(0,200)),productId:String(r.productId || "").slice(0,20)}
     }),
     errors:p.errors.map(function(e) { if (typeof e!=="string") throw new Error("Invalid error"); return e.slice(0,300) })
   }

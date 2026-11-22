@@ -162,7 +162,16 @@ Panel {
     if (solaarCheck.running)
       return
     solaarCheck.pending = true
+    solaarDeadline.restart()
     solaarCheck.running = true
+  }
+  // omarchy-cmd-present only looks Solaar up: a check that hangs is killed,
+  // so it ends with an error instead of blocking every later request.
+  Timer {
+    id: solaarDeadline
+    interval: 5000
+    onTriggered: if (solaarCheck.running)
+      solaarCheck.signal(9)
   }
   Process {
     id: solaarCheck
@@ -174,6 +183,7 @@ Panel {
       if (!pending)
         return
       pending = false
+      solaarDeadline.stop()
       // uwsm-app gives Solaar its own app scope, as the host launches apps,
       // instead of the compositor service's cgroup.
       if (code === 0) {

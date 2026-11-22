@@ -147,7 +147,9 @@ PanelKeyCatcher {
   onTabRequested: function (direction) {
     root.switchPanelRequested(direction)
   }
-  onTextKey: function (text) {
+  onTextKey: function (text, modifiers) {
+    if (!cursor.plain(modifiers))
+      return
     if (text === "s")
       root.settingsRequested()
     else if (text === "r")

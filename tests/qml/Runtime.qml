@@ -13,8 +13,8 @@ import "plugin/kit"
 // device rows and empty states, settings saving through the bar, backoff and
 // restart (also after a helper that can't start, stalls or floods its
 // output), teardown when the last instance goes, a bar reload while the
-// stopped helper is still exiting, opening Solaar, translations, plurals and
-// RTL mirroring.
+// stopped helper is still exiting or ignores SIGTERM, opening Solaar,
+// translations, plurals and RTL mirroring.
 //
 // FOAMY_SCENARIO=full (tests/runtime.py's English run) first starts the real
 // logitech_events.py with BoltService's default command against a fake
@@ -259,6 +259,35 @@ ShellRoot {
     }, "the popup body is built", stepTwo)
   }
 
+  // s, r and o are the popup's shortcuts only without Alt, Ctrl or Meta:
+  // the host passes the modifiers so that a panel can tell Alt+S from S.
+  function modifierChecks(view) {
+    var asked = []
+    var handlers = {
+      settingsRequested: function () {
+        asked.push("settings")
+      },
+      refreshRequested: function () {
+        asked.push("refresh")
+      },
+      solaarRequested: function () {
+        asked.push("solaar")
+      }
+    }
+    for (var name in handlers)
+      view[name].connect(handlers[name])
+    var modifiers = [Qt.AltModifier, Qt.ControlModifier, Qt.MetaModifier, Qt.AltModifier | Qt.ShiftModifier]
+    var texts = ["s", "r", "o"]
+    texts.forEach(function (text) {
+      modifiers.forEach(function (modifier) {
+        keys.emitTextKey(view, text, modifier)
+      })
+    })
+    eq(JSON.stringify(asked), "[]", "s, r and o with Alt, Ctrl or Meta do nothing")
+    for (var handler in handlers)
+      view[handler].disconnect(handlers[handler])
+  }
+
   // The lowest battery shows next to the glyph: when low (the default), or
   // always; never with "never" or on a vertical bar.
   function percentageChecks(first, glyph) {
@@ -310,6 +339,7 @@ ShellRoot {
     eq(view.cursorKey, "solaar", "l moves on to Solaar")
     view.moveRequested(0, 1)
     eq(view.cursorKey, "refresh", "then Refresh")
+    shell.modifierChecks(view)
     shell.key(view, "r")
     eq(Bolt.BoltService.refreshing, true, "r asks the helper for a snapshot")
     eq(view.LayoutMirroring.enabled, shell.lang === "ar", "popup body mirrors in RTL only")
@@ -858,9 +888,10 @@ ShellRoot {
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that
-  // reports it missing first, then present; tests/runtime.py checks what ran):
-  // missing explains itself and keeps the popup, present launches it through
-  // uwsm-app (a fake as well) and closes.
+  // reports it missing first, then hangs, then reports it present;
+  // tests/runtime.py checks what ran): missing explains itself and keeps the
+  // popup, a hung check ends at its deadline with the same error, present
+  // launches it through uwsm-app (a fake as well) and closes.
   function stepSolaar(next) {
     var first = panels.itemAt(0)
     first.open()
@@ -878,11 +909,19 @@ ShellRoot {
       shell.key(first.popup.bodyItem, "o")
       eq(first.launchError, "", "a new check clears the error")
       waitFor(function () {
-        return !first.opened
-      }, "Solaar opens and the popup closes", function () {
-        eq(first.opened, false, "Solaar found: the popup closes")
-        eq(first.launchError, "", "and no error")
-        next()
+        return first.launchError !== ""
+      }, "the hung check ends at its deadline", function () {
+        eq(first.launchError, FoamyI18n.t("Could not start Solaar."), "a hung check is explained")
+        eq(first.opened, true, "the popup stays open")
+        shell.key(first.popup.bodyItem, "o")
+        eq(first.launchError, "", "the next check starts")
+        waitFor(function () {
+          return !first.opened
+        }, "Solaar opens and the popup closes", function () {
+          eq(first.opened, false, "Solaar found: the popup closes")
+          eq(first.launchError, "", "and no error")
+          next()
+        })
       })
     })
   }
@@ -892,6 +931,8 @@ ShellRoot {
     eq(service.members, 0, "no members after the last bar goes")
     eq(service.running, false, "helper stops with the last bar instance")
     eq(service.waiting, false, "no restart pending")
+    // Left running, it would kill the helper the next bars start.
+    eq(service.stopTimer.running, false, "a clean stop with no bar left clears the kill deadline")
     panels.model = 3
     // The new run's first snapshot is N0 (the stopped run's N1 stays until then).
     waitFor(function () {
@@ -942,6 +983,49 @@ ShellRoot {
         eq(service.failures, 0, "a requested stop is not a failure")
         eq(service.waiting, false, "no backoff pending")
         eq(service.payload.status, "ok", "readings, not the stopped-helper error")
+        // A deadline left from the old run would kill this new helper.
+        eq(service.stopTimer.running, false, "a clean stop clears the kill deadline")
+        stepStuckStop()
+      })
+    })
+  }
+
+  // A helper whose main thread is stuck (in a Solaar call) never handles
+  // SIGTERM. The stop is made certain after a deadline, so bars that come
+  // back while it hangs get a new helper instead of waiting for ever.
+  function stepStuckStop() {
+    var service = Bolt.BoltService
+    var startsBefore = service.starts
+    var state = {
+      rejoined: false,
+      exiting: false
+    }
+    function rejoin() {
+      if (service.wanted || state.rejoined)
+        return
+      state.rejoined = true
+      service.wantedChanged.disconnect(rejoin)
+      Qt.callLater(function () {
+        state.exiting = service.running
+        panels.model = 3
+      })
+    }
+    service.stopTimer.interval = 300
+    service.helper.write("stuck\n")
+    waitFor(function () {
+      return service.payload.receivers.length > 0 && service.payload.receivers[0].productId === "Nstuck"
+    }, "the fake ignores SIGTERM", function () {
+      service.wantedChanged.connect(rejoin)
+      panels.model = 0
+      // The new run's first snapshot is N0 (the stuck run's Nstuck stays until then).
+      waitFor(function () {
+        var p = service.payload
+        return state.rejoined && service.running && service.starts === startsBefore + 1 && p.status === "ok" && p.receivers.length > 0 && p.receivers[0].productId === "N0"
+      }, "the stuck helper is stopped and the bars get readings from a new one", function () {
+        eq(state.exiting, true, "new bars joined while the stuck helper was still running")
+        eq(service.starts, startsBefore + 1, "started once more")
+        eq(service.failures, 0, "a requested stop is not a failure")
+        eq(service.waiting, false, "no backoff pending")
         finish()
       })
     })

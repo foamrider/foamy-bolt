@@ -22,6 +22,11 @@ test('status payloads are validated and bounded', () => {
   // Helper text reaches the popup and the bar tooltip: the copy is bounded.
   const device = extra => M.parsePayload({ ...payload, devices: [{ ...payload.devices[0], ...extra }] }).devices[0]
   assert.equal(device({ name: 'n'.repeat(500) }).name.length, 200, 'device name bounded')
+  // Names show on one line (rows, tiles, tooltips): a line break the device sends becomes a space.
+  for (const [name, shown] of [['Two\nlines', 'Two lines'], ['A\r\nB\rC', 'A B C'], ['Line\u2028sep\u2029para', 'Line sep para'], ['Run\n\n\r\nof breaks', 'Run of breaks']]) {
+    assert.equal(device({ name }).name, shown, `device name ${JSON.stringify(name)}`)
+    assert.equal(M.parsePayload({ ...payload, receivers: [{ name, productId: 'C548' }] }).receivers[0].name, shown, `receiver name ${JSON.stringify(name)}`)
+  }
   assert.equal(M.parsePayload({ ...payload, errors: ['e'.repeat(1000)] }).errors[0].length, 300, 'error text bounded')
   assert.equal(M.parsePayload({ ...payload, receivers: [{ name: 'Bolt', productId: 'p'.repeat(50) }] }).receivers[0].productId.length, 20, 'productId bounded')
   assert.equal(device({ kindIcon: '<b>x</b>' }).kindIcon, 'device', 'unknown kind icon falls back')
