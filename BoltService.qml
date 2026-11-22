@@ -59,7 +59,10 @@ QtObject {
   onWantedChanged: wanted ? start() : stop()
   Component.onCompleted: if (wanted)
     start()
-  Component.onDestruction: stop()
+  // Quickshell 0.3.2 does not run Component.onDestruction in a singleton.
+  // On quit and reload it destroys `helper` instead, which kills the process
+  // with SIGKILL, also one whose main thread a Solaar call holds. If the
+  // shell dies without that, the helper reads EOF on stdin and stops.
 
   function start() {
     if (!wanted || helper.running)
