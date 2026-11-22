@@ -931,6 +931,8 @@ ShellRoot {
     eq(service.members, 0, "no members after the last bar goes")
     eq(service.running, false, "helper stops with the last bar instance")
     eq(service.waiting, false, "no restart pending")
+    // Left running, it would kill the helper the next bars start.
+    eq(service.stopTimer.running, false, "a clean stop with no bar left clears the kill deadline")
     panels.model = 3
     // The new run's first snapshot is N0 (the stopped run's N1 stays until then).
     waitFor(function () {
@@ -981,6 +983,8 @@ ShellRoot {
         eq(service.failures, 0, "a requested stop is not a failure")
         eq(service.waiting, false, "no backoff pending")
         eq(service.payload.status, "ok", "readings, not the stopped-helper error")
+        // A deadline left from the old run would kill this new helper.
+        eq(service.stopTimer.running, false, "a clean stop clears the kill deadline")
         stepStuckStop()
       })
     })
