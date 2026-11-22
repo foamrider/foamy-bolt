@@ -259,6 +259,35 @@ ShellRoot {
     }, "the popup body is built", stepTwo)
   }
 
+  // s, r and o are the popup's shortcuts only without Alt, Ctrl or Meta:
+  // the host passes the modifiers so that a panel can tell Alt+S from S.
+  function modifierChecks(view) {
+    var asked = []
+    var handlers = {
+      settingsRequested: function () {
+        asked.push("settings")
+      },
+      refreshRequested: function () {
+        asked.push("refresh")
+      },
+      solaarRequested: function () {
+        asked.push("solaar")
+      }
+    }
+    for (var name in handlers)
+      view[name].connect(handlers[name])
+    var modifiers = [Qt.AltModifier, Qt.ControlModifier, Qt.MetaModifier, Qt.AltModifier | Qt.ShiftModifier]
+    var texts = ["s", "r", "o"]
+    texts.forEach(function (text) {
+      modifiers.forEach(function (modifier) {
+        keys.emitTextKey(view, text, modifier)
+      })
+    })
+    eq(JSON.stringify(asked), "[]", "s, r and o with Alt, Ctrl or Meta do nothing")
+    for (var handler in handlers)
+      view[handler].disconnect(handlers[handler])
+  }
+
   // The lowest battery shows next to the glyph: when low (the default), or
   // always; never with "never" or on a vertical bar.
   function percentageChecks(first, glyph) {
@@ -310,6 +339,7 @@ ShellRoot {
     eq(view.cursorKey, "solaar", "l moves on to Solaar")
     view.moveRequested(0, 1)
     eq(view.cursorKey, "refresh", "then Refresh")
+    shell.modifierChecks(view)
     shell.key(view, "r")
     eq(Bolt.BoltService.refreshing, true, "r asks the helper for a snapshot")
     eq(view.LayoutMirroring.enabled, shell.lang === "ar", "popup body mirrors in RTL only")
