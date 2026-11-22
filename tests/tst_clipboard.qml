@@ -99,16 +99,6 @@ Item {
       wait(500)
       compare(field.text, "")
     }
-    function test_context_menu_paste() {
-      var menu = findChild(field, "clipboardMenu")
-      verify(menu !== null)
-      menu.popup()
-      tryCompare(menu, "opened", true)
-      menu.itemAt(5).triggered()
-      tryCompare(field, "pasteRunning", false)
-      compare(field.text, "folder")
-      compare(menu.opened, false)
-    }
     function test_keyboard_unicode_selection_undo_redo() {
       field.text = "before-old-after"
       field.select(7, 10)

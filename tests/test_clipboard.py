@@ -1,7 +1,8 @@
 """A plain SafeTextField's editing and paste races through kit/clipboard.sh
-(tests/tst_clipboard.qml). foamy-kit's tests/test_clipboard.py covers
-clipboard.sh itself: its size, NUL, line and deadline bounds, and a read
-that ends with a killed wrapper.
+(tests/tst_clipboard.qml). Each case there checks something that
+foamy-kit's own tests do not check on a plain field. foamy-kit's
+tests/test_clipboard.py covers clipboard.sh itself: its size, NUL, line
+and deadline bounds, and a read that ends with a killed wrapper.
 
 The wl-paste, clipboard-fixture and timeout stand-ins are foamy-kit's
 hostenv.clipboard_fakes(). The case needs Quickshell, so tests/suite.sh
