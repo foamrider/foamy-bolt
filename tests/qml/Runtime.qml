@@ -392,12 +392,25 @@ ShellRoot {
     first.openSettings()
     eq(first.opened, true, "settings opens the popup")
     eq(first.editingSettings, true, "and lands on Settings")
-    first.close()
-    eq(first.editingSettings, false, "Settings resets on close")
-    service.helper.signal(15)
+    var view = first.popup.bodyItem
     waitFor(function () {
-      return !service.runActive && service.waiting
-    }, "the terminated helper's run ends", stepFour)
+      return !view.focus
+    }, "Settings takes the keys from the list", function () {
+      first.close()
+      eq(first.editingSettings, false, "Settings resets on close")
+      // On open the host focuses the popup body: that focus must reach the
+      // list, not the hidden Settings page, or the first Esc only goes back.
+      first.open()
+      waitFor(function () {
+        return view.focus
+      }, "the list takes the keys back when Settings closes with the popup", function () {
+        first.close()
+        service.helper.signal(15)
+        waitFor(function () {
+          return !service.runActive && service.waiting
+        }, "the terminated helper's run ends", stepFour)
+      })
+    })
   }
 
   function stepFour() {
