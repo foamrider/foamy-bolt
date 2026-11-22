@@ -230,7 +230,8 @@ QtObject {
   }
 
   // SIGTERM is handled by the helper's main thread, which a stuck Solaar
-  // call holds; listeners take up to 2 s each to stop. Past this the helper
+  // call holds. Solaar's listeners stop together within about a second; one
+  // that hangs is waited for 2 s. Past this the helper
   // is killed, or it would keep running and block every later start.
   property Timer stopTimer: Timer {
     interval: 5000
