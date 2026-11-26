@@ -68,6 +68,7 @@
   "Couldn't save the setting.": "Couldn't save the setting.",
   "Settings can't be saved: this widget has no bar entry.": "Settings can't be saved: this widget has no bar entry.",
   "That value isn't allowed.": "That value isn't allowed.",
+  "The saved list in shell.json isn't valid, so it wasn't replaced.": "The saved list in shell.json isn't valid, so it wasn't replaced.",
   "Solaar Python support is not installed.": "Solaar Python support is not installed.",
   "This Solaar version isn't supported. Check for a foamy-bolt update.": "This Solaar version isn't supported. Check for a foamy-bolt update.",
   "Unable to read Logitech receivers.": "Unable to read Logitech receivers.",
