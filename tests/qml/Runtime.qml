@@ -365,6 +365,7 @@ ShellRoot {
     eq(mockBar.saved.length, 1, "invalid value not saved")
     check(first.prefs.error !== "", "invalid value reported")
     check(view.settingsError !== "", "the settings page shows it")
+    shell.refusedPickChecks(view)
     shell.thresholdChecks(first, view)
     first.closeSettings()
     eq(view.blocked, false, "back from Settings")
@@ -674,6 +675,25 @@ ShellRoot {
       })
     bounded("helper errors are capped in the tooltip")
     service.payload = kept
+  }
+
+  // Each settings dropdown is linked to the panel's FoamyPrefsQueue under its
+  // own key: a pick the queue refuses shows the saved value again at once,
+  // not for the dropdown's 10 s pick hold. Every option the page offers is
+  // valid, so the refused picks are values the schema rejects.
+  function refusedPickChecks(view) {
+    var picks = [["Layout", "diagonal"], ["Show battery in the bar", "sometimes"], ["Refresh every", "12"]]
+    picks.forEach(function (pick) {
+      var dropdown = shell.findAll(view, function (item) {
+        return item.label === FoamyI18n.t(pick[0]) && item.shownValue !== undefined
+      })[0]
+      check(dropdown !== undefined, pick[0] + ": the settings page has the dropdown")
+      if (!dropdown)
+        return
+      var saved = dropdown.value
+      dropdown.select(pick[1])
+      eq(dropdown.shownValue, saved, pick[0] + ": a refused pick shows the saved value again at once")
+    })
   }
 
   // The device list scrolls when it is taller than the card, and the keyboard

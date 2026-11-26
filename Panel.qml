@@ -285,4 +285,12 @@ Panel {
       }
     }
   }
+  // The settings dropdowns end a pick that `prefs` refuses (BoltView.queue).
+  // Set from here: inside the body Component, which is not bound to this
+  // file, a read of `prefs` is an unqualified access (qmllint).
+  Binding {
+    target: popup.bodyItem
+    property: "queue"
+    value: prefs
+  }
 }

@@ -31,6 +31,10 @@ PanelKeyCatcher {
   property bool saving: false
   property string settingsError: ""
   property bool retryable: false
+  // The FoamyPrefsQueue the settings save through (Panel's). Linked to it, a
+  // dropdown shows the saved value again at once when the queue refuses its
+  // pick. The preview has none.
+  property QtObject queue: null
   property bool refreshing: false
   property real lastUpdatedAt: 0
   property string launchError: ""
@@ -366,6 +370,8 @@ PanelKeyCatcher {
         label: FoamyI18n.t("Layout")
         value: root.setting("layout")
         enabled: !root.saving
+        queue: root.queue
+        queueKey: "layout"
         options: ["list", "tiles"].map(function (v) {
           return {
             value: v,
@@ -412,6 +418,8 @@ PanelKeyCatcher {
         label: FoamyI18n.t("Show battery in the bar")
         value: root.setting("barPercentage")
         enabled: !root.saving
+        queue: root.queue
+        queueKey: "barPercentage"
         options: ["low", "always", "never"].map(function (v) {
           return {
             value: v,
@@ -441,6 +449,8 @@ PanelKeyCatcher {
         label: FoamyI18n.t("Refresh every")
         value: String(root.setting("refreshSeconds"))
         enabled: !root.saving
+        queue: root.queue
+        queueKey: "refreshSeconds"
         options: root.refreshOptions()
         onChanged: function (v) {
           root.saveRequested("refreshSeconds", Number(v))
