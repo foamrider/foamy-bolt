@@ -387,6 +387,19 @@ ShellRoot {
       finish()
       return
     }
+    // The host's KeyboardPanel takes the keyboard on every open, so on the
+    // desktop the popup's window is the active one. Here tallView's window
+    // comes after it, and Qt keeps no active focus in a window that is not
+    // active: FoamyPopup could not see the keys move or give them back.
+    var window = panels.itemAt(0).popup.bodyItem.Window.window
+    window.requestActivate()
+    waitFor(function () {
+      return window.active
+    }, "the popup's window is active", stepThreeB)
+  }
+
+  function stepThreeB() {
+    var service = Bolt.BoltService
     // The settings IPC on a closed popup opens it on Settings (FoamySettingsState).
     var first = panels.itemAt(0)
     eq(first.opened, false, "popup closed")
