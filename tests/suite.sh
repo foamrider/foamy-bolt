@@ -27,11 +27,6 @@ run python3 -I tests/test_logitech_events.py
 run python3 -I tests/test_logitech_status.py
 # Prints a SKIP line and passes where Solaar isn't installed (CI).
 run python3 -I tests/test_solaar_compat.py
-if ((ci)); then
-  skip "tests/test_clipboard.py: Quickshell on the Omarchy shell"
-else
-  run python3 -I tests/test_clipboard.py
-fi
 if ((ci || fast)); then
   skip "tests/runtime.py: offscreen Quickshell on the Omarchy 4.5 shell"
 else

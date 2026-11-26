@@ -40,13 +40,6 @@ Panel {
   FoamySettingsState {
     id: settingsState
     panel: root
-    // Also when the page resets because the popup closed: the host focuses
-    // the popup body on the next open, and that focus must reach the list,
-    // not the hidden page.
-    onHidden: Qt.callLater(function () {
-      if (popup.bodyItem)
-        popup.bodyItem.forceActiveFocus()
-    })
   }
 
   readonly property var payload: BoltService.payload
@@ -284,5 +277,13 @@ Panel {
         }
       }
     }
+  }
+  // The settings dropdowns end a pick that `prefs` refuses (BoltView.queue).
+  // Set from here: inside the body Component, which is not bound to this
+  // file, a read of `prefs` is an unqualified access (qmllint).
+  Binding {
+    target: popup.bodyItem
+    property: "queue"
+    value: prefs
   }
 }
