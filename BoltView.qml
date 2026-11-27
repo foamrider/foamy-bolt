@@ -260,11 +260,13 @@ PanelKeyCatcher {
           spacing: FoamyStyle.gapSmall
           FoamyAction {
             id: detailsAction
+            objectName: "detailsAction"
             anchors.left: parent.left  // mirrored in RTL
             label: FoamyI18n.t("Receiver details")
             iconName: root.receiverDetails ? "chevron-down" : "chevron-right"
             foreground: FoamyPalette.secondaryText
             hasCursor: root.hasCursor("details")
+            cursorByKeys: cursor.byKeys
             onHoveredChanged: if (hovered)
               root.hover("details")
             onClicked: root.receiverDetailsToggled()
@@ -313,11 +315,13 @@ PanelKeyCatcher {
           spacing: FoamyStyle.gapLarge
           FoamyAction {
             id: solaarAction
+            objectName: "solaarAction"
             iconName: "external-link"
             label: FoamyI18n.t("Solaar")
             tooltipText: FoamyI18n.t("Open Solaar")
             foreground: FoamyPalette.secondaryText
             hasCursor: root.hasCursor("solaar")
+            cursorByKeys: cursor.byKeys
             onHoveredChanged: if (hovered)
               root.hover("solaar")
             onClicked: root.solaarRequested()
@@ -334,12 +338,14 @@ PanelKeyCatcher {
           }
           FoamyAction {
             id: refreshAction
+            objectName: "refreshAction"
             iconName: "refresh-cw"
             foreground: FoamyPalette.secondaryText
             tooltipText: FoamyI18n.t(root.refreshing ? "Refreshing…" : "Refresh")
             actionEnabled: !root.refreshing
             spinning: root.shown && !root.editingSettings && root.refreshing
             hasCursor: root.hasCursor("refresh")
+            cursorByKeys: cursor.byKeys
             onHoveredChanged: if (hovered)
               root.hover("refresh")
             onClicked: root.refreshRequested()

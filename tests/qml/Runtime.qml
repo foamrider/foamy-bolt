@@ -1,4 +1,5 @@
 import QtQuick
+import QtTest
 import Quickshell
 import qs.Commons
 import qs.Commons as Commons
@@ -105,6 +106,31 @@ ShellRoot {
     }
   }
 
+  TestEvent {
+    id: ev
+  }
+  // The keys' cursor (on Solaar) draws the accent border; the pointer moved
+  // onto Refresh takes the cursor and no action draws it. Leaves the cursor
+  // on Refresh, by the keys.
+  function keysBorderChecks(view) {
+    var actions = ["detailsAction", "solaarAction", "refreshAction"].map(function (name) {
+      return findByName(view, name)
+    })
+    var bordered = function () {
+      return actions.filter(function (a) {
+        return a.border.width > 0
+      }).map(function (a) {
+        return a.objectName
+      })
+    }
+    var solaar = actions[1], refresh = actions[2]
+    check(solaar.hasCursor && solaar.border.width === FoamyStyle.borderWidth && Qt.colorEqual(solaar.border.color, Commons.Color.accent) && JSON.stringify(bordered()) === JSON.stringify(["solaarAction"]), "the keys' cursor on Solaar: its accent border, on it alone " + JSON.stringify(bordered()))
+    ev.mouseMove(refresh, refresh.width / 2, refresh.height / 2, -1, Qt.NoButton, Qt.NoModifier)
+    eq(view.cursorKey, "refresh", "the pointer on Refresh takes the cursor")
+    eq(JSON.stringify(bordered()), "[]", "the pointer's cursor: no action draws the keys' border")
+    view.moveRequested(0, 1)
+    check(refresh.hasCursor && refresh.border.width === FoamyStyle.borderWidth && JSON.stringify(bordered()) === JSON.stringify(["refreshAction"]), "a key again: the border on Refresh " + JSON.stringify(bordered()))
+  }
   // Emits PanelKeyCatcher.textKey(text, modifiers) the way the host does.
   FoamyCursor {
     id: keys
@@ -337,6 +363,7 @@ ShellRoot {
     eq(first.receiverDetails, true, "Enter unfolds Receiver details")
     view.moveRequested(1, 0)
     eq(view.cursorKey, "solaar", "l moves on to Solaar")
+    shell.keysBorderChecks(view)
     view.moveRequested(0, 1)
     eq(view.cursorKey, "refresh", "then Refresh")
     shell.modifierChecks(view)
