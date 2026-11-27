@@ -136,6 +136,9 @@ def ipc_failures(reply):
     return failures
 
 
+DIM_RED = str(KIT / "tests/fixtures/themes/dim-red.toml")
+
+
 def run(host, lang, scenario, theme="dark"):
     full = scenario == "full"
     shell = (PLUGIN / "tests/qml/Runtime.qml").read_text()
@@ -160,6 +163,7 @@ def run(host, lang, scenario, theme="dark"):
     r.env.update(
         FOAMY_LANG=lang,
         FOAMY_SCENARIO=scenario,
+        FOAMY_DIM_RED="1" if theme == DIM_RED else "",
         FOAMY_HOLD_MS="3000",
         PYTHONPATH=str(fake_solaar),
         DISPLAY="",
@@ -229,7 +233,6 @@ def run(host, lang, scenario, theme="dark"):
 if __name__ == "__main__":
     # The Norwegian run uses a dark theme with a dim red (kit fixture), where
     # the raw urgent colour reads 2.70:1: the low-battery texts must lighten.
-    dim_red = str(KIT / "tests/fixtures/themes/dim-red.toml")
-    cases = [("4.5", "en", "full", "dark"), ("4.5", "no", "language", dim_red), ("4.5", "ar", "language", "dark")]
+    cases = [("4.5", "en", "full", "dark"), ("4.5", "no", "language", DIM_RED), ("4.5", "ar", "language", "dark")]
     results = [run(host, lang, scenario, theme) for host, lang, scenario, theme in cases]
     raise SystemExit(0 if all(results) else 1)

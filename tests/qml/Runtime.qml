@@ -917,6 +917,8 @@ ShellRoot {
       return item.visible && item.Accessible.role === Accessible.AlertMessage
     })
     eq(alerts.length ? alerts[0].text : "", t("Unable to read Logitech receivers."), "a helper error shows as a translated alert line")
+    if (alerts.length)
+      shell.inkReads(alerts[0].color, first.popup.cardItem.color, FoamyPalette.error, "the helper error line")
     service.payload = ({
         status: "absent",
         receivers: [],
@@ -934,16 +936,27 @@ ShellRoot {
     eq(shell.shownText(view, t("Updated just now")).length, 1, "the footer says when the snapshot was taken")
   }
 
+  // tests/runtime.py sets FOAMY_DIM_RED in its dim-red theme run, where the
+  // raw red must not read: otherwise the contrast checks could not fail.
+  readonly property bool dimRed: Quickshell.env("FOAMY_DIM_RED") === "1"
+
+  // A status text's drawn colour reads at 4.5:1 on its surface; in the dim-red
+  // run the raw colour it steps from does not.
+  function inkReads(drawn, surface, raw, what) {
+    var ratio = FoamyPalette.contrastRatio(drawn, surface)
+    check(ratio >= 4.5, what + " " + drawn + " reads " + ratio.toFixed(2) + ":1 on " + surface + ", under 4.5:1")
+    if (dimRed) {
+      var rawRatio = FoamyPalette.contrastRatio(raw, surface)
+      check(rawRatio < 4.5, "dim-red theme: the raw " + raw + " reads " + rawRatio.toFixed(2) + ":1 on " + surface + ", so " + what + " is not tested")
+    }
+  }
+
   // The low-battery state and reading read at 4.5:1 where they are drawn: on
   // the popup surface in the list, on the tile's fill in tiles. tests/runtime.py
   // runs one case in a dark theme with a dim red, where the raw urgent colour
   // does not (2.70:1).
   function lowInkChecks(first, view, rows) {
-    var t = FoamyI18n.t
-    var surfaces = {
-      list: FoamyPalette.background,
-      tiles: Qt.tint(FoamyPalette.background, FoamyPalette.fieldFill)
-    };
+    var t = FoamyI18n.t;
     ["list", "tiles"].forEach(function (layout) {
       first.settings = shell.barSettings({
         showOffline: true,
@@ -964,8 +977,8 @@ ShellRoot {
         check(shown !== undefined, layout + ": the low row shows " + text)
         if (!shown)
           return
-        var ratio = FoamyPalette.contrastRatio(shown.color, surfaces[layout])
-        check(ratio >= 4.5, layout + ": low-battery " + text + " " + shown.color + " reads " + ratio.toFixed(2) + ":1 on its surface, under 4.5:1")
+        // The surface is the fill the row draws, over the drawn popup card.
+        shell.inkReads(shown.color, Qt.tint(first.popup.cardItem.color, low.color), Commons.Color.urgent, layout + ": low-battery " + text)
       })
     })
     first.settings = shell.barSettings({

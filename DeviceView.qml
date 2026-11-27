@@ -17,8 +17,9 @@ Rectangle {
   readonly property bool hasBattery: online && level !== null
   readonly property bool low: hasBattery && level < threshold
   readonly property color nameColor: online ? FoamyPalette.text : FoamyPalette.secondaryText
-  // Text on the tile's fill, or on the popup surface in the list.
-  readonly property color surfaceColor: tile ? Qt.tint(FoamyPalette.background, FoamyPalette.fieldFill) : FoamyPalette.background
+  // The row's own fill over the popup surface: the tile's fill, or the bare
+  // popup surface for a transparent list row.
+  readonly property color surfaceColor: Qt.tint(FoamyPalette.background, color)
   readonly property color lowColor: FoamyPalette.onSurface(Commons.Color.urgent, surfaceColor)
   readonly property color readingColor: low ? lowColor : nameColor
   readonly property color levelColor: low ? Commons.Color.urgent : Commons.Color.accent
