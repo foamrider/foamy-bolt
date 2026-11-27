@@ -842,6 +842,7 @@ ShellRoot {
       return row.Accessible.name
     })
     eq(JSON.stringify(names), JSON.stringify(["MX Master 3S, " + t("Low battery") + ", " + t("%1%", 12), "MX Keys S, " + t("Charging") + ", " + t("%1%", 64), "G435, " + t("Offline")]), "each row says its device, state and reading")
+    shell.lowInkChecks(first, view, rows)
     // The other states: charging wins over low battery, an online device
     // without a reading, and an online device above the threshold.
     service.payload = ({
@@ -916,6 +917,8 @@ ShellRoot {
       return item.visible && item.Accessible.role === Accessible.AlertMessage
     })
     eq(alerts.length ? alerts[0].text : "", t("Unable to read Logitech receivers."), "a helper error shows as a translated alert line")
+    if (alerts.length)
+      shell.inkReads(alerts[0].color, first.popup.cardItem.color, FoamyPalette.error, "the helper error line")
     service.payload = ({
         status: "absent",
         receivers: [],
@@ -931,6 +934,56 @@ ShellRoot {
     panels.itemAt(1).settings = shell.barSettings({})
     service.payload = kept
     eq(shell.shownText(view, t("Updated just now")).length, 1, "the footer says when the snapshot was taken")
+  }
+
+  // tests/runtime.py sets FOAMY_DIM_RED in its dim-red theme run, where the
+  // raw red must not read: otherwise the contrast checks could not fail.
+  readonly property bool dimRed: Quickshell.env("FOAMY_DIM_RED") === "1"
+
+  // A status text's drawn colour reads at 4.5:1 on its surface; in the dim-red
+  // run the raw colour it steps from does not.
+  function inkReads(drawn, surface, raw, what) {
+    var ratio = FoamyPalette.contrastRatio(drawn, surface)
+    check(ratio >= 4.5, what + " " + drawn + " reads " + ratio.toFixed(2) + ":1 on " + surface + ", under 4.5:1")
+    if (dimRed) {
+      var rawRatio = FoamyPalette.contrastRatio(raw, surface)
+      check(rawRatio < 4.5, "dim-red theme: the raw " + raw + " reads " + rawRatio.toFixed(2) + ":1 on " + surface + ", so " + what + " is not tested")
+    }
+  }
+
+  // The low-battery state and reading read at 4.5:1 where they are drawn: on
+  // the popup surface in the list, on the tile's fill in tiles. tests/runtime.py
+  // runs one case in a dark theme with a dim red, where the raw urgent colour
+  // does not (2.70:1).
+  function lowInkChecks(first, view, rows) {
+    var t = FoamyI18n.t;
+    ["list", "tiles"].forEach(function (layout) {
+      first.settings = shell.barSettings({
+        showOffline: true,
+        layout: layout
+      })
+      var low = rows().filter(function (row) {
+        return row.low && row.visible
+      })[0]
+      check(low !== undefined, layout + ": a low-battery row is shown")
+      if (!low)
+        return
+      [t("Low battery"), t("%1%", 12)].forEach(function (text) {
+        // Not shownText: a row rebuilt for the new layout has no width
+        // until the layout's next polish.
+        var shown = shell.findAll(low, function (item) {
+          return item.text === text && item.visible
+        })[0]
+        check(shown !== undefined, layout + ": the low row shows " + text)
+        if (!shown)
+          return
+        // The surface is the fill the row draws, over the drawn popup card.
+        shell.inkReads(shown.color, Qt.tint(first.popup.cardItem.color, low.color), Commons.Color.urgent, layout + ": low-battery " + text)
+      })
+    })
+    first.settings = shell.barSettings({
+      showOffline: true
+    })
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that

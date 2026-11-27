@@ -17,7 +17,11 @@ Rectangle {
   readonly property bool hasBattery: online && level !== null
   readonly property bool low: hasBattery && level < threshold
   readonly property color nameColor: online ? FoamyPalette.text : FoamyPalette.secondaryText
-  readonly property color readingColor: low ? Commons.Color.urgent : nameColor
+  // The row's own fill over the popup surface: the tile's fill, or the bare
+  // popup surface for a transparent list row.
+  readonly property color surfaceColor: Qt.tint(FoamyPalette.background, color)
+  readonly property color lowColor: FoamyPalette.onSurface(Commons.Color.urgent, surfaceColor)
+  readonly property color readingColor: low ? lowColor : nameColor
   readonly property color levelColor: low ? Commons.Color.urgent : Commons.Color.accent
   // Lucide icons from the kit (one icon set across foamy plugins).
   readonly property string icon: device.kindIcon === "mouse" ? "mouse" : device.kindIcon === "keyboard" ? "keyboard" : device.kindIcon === "headset" ? "headphones" : "devices"
@@ -62,7 +66,7 @@ Rectangle {
         text: root.stateText
         textFormat: Text.PlainText
         horizontalAlignment: Text.AlignLeft
-        color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText
+        color: root.low ? root.lowColor : FoamyPalette.secondaryText
         font.family: FoamyStyle.fontFamily
         font.pixelSize: FoamyStyle.font.bodySmall
         elide: Text.ElideRight
@@ -140,7 +144,7 @@ Rectangle {
       text: root.stateText
       textFormat: Text.PlainText
       horizontalAlignment: Text.AlignLeft
-      color: root.low ? Commons.Color.urgent : FoamyPalette.secondaryText
+      color: root.low ? root.lowColor : FoamyPalette.secondaryText
       font.family: FoamyStyle.fontFamily
       font.pixelSize: FoamyStyle.font.bodySmall
       wrapMode: Text.WordWrap

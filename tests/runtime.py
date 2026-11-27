@@ -136,7 +136,10 @@ def ipc_failures(reply):
     return failures
 
 
-def run(host, lang, scenario):
+DIM_RED = str(KIT / "tests/fixtures/themes/dim-red.toml")
+
+
+def run(host, lang, scenario, theme="dark"):
     full = scenario == "full"
     shell = (PLUGIN / "tests/qml/Runtime.qml").read_text()
     # A short prefix: qs's IPC socket sits five levels below this dir, and a
@@ -147,6 +150,7 @@ def run(host, lang, scenario):
         shell,
         plugin=PLUGIN,
         language=lang,
+        theme=theme,
         prefix=f"bolt-{lang}-",
         fakebin={"omarchy-cmd-present": FAKE_CMD_PRESENT, "solaar": FAKE_SOLAAR, "uwsm-app": FAKE_UWSM_APP},
     )
@@ -159,6 +163,7 @@ def run(host, lang, scenario):
     r.env.update(
         FOAMY_LANG=lang,
         FOAMY_SCENARIO=scenario,
+        FOAMY_DIM_RED="1" if theme == DIM_RED else "",
         FOAMY_HOLD_MS="3000",
         PYTHONPATH=str(fake_solaar),
         DISPLAY="",
@@ -226,6 +231,8 @@ def run(host, lang, scenario):
 
 
 if __name__ == "__main__":
-    cases = [("4.5", "en", "full"), ("4.5", "no", "language"), ("4.5", "ar", "language")]
-    results = [run(host, lang, scenario) for host, lang, scenario in cases]
+    # The Norwegian run uses a dark theme with a dim red (kit fixture), where
+    # the raw urgent colour reads 2.70:1: the low-battery texts must lighten.
+    cases = [("4.5", "en", "full", "dark"), ("4.5", "no", "language", DIM_RED), ("4.5", "ar", "language", "dark")]
+    results = [run(host, lang, scenario, theme) for host, lang, scenario, theme in cases]
     raise SystemExit(0 if all(results) else 1)
