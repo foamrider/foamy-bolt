@@ -109,27 +109,57 @@ ShellRoot {
   TestEvent {
     id: ev
   }
-  // The keys' cursor (on Solaar) draws the accent border; the pointer moved
-  // onto Refresh takes the cursor and no action draws it. Leaves the cursor
-  // on Refresh, by the keys.
-  function keysBorderChecks(view) {
-    var actions = ["detailsAction", "solaarAction", "refreshAction"].map(function (name) {
-      return findByName(view, name)
-    })
+  // The keys' cursor draws the accent border on the stop it is on, and on
+  // that stop alone; the pointer, onto a stop or moved inside the stop the
+  // keys came to, takes the cursor and no stop draws it. Steps only between
+  // Settings, Receiver details and Solaar, which are never inert (Refresh is
+  // while the helper's first reply is out). Starts with the cursor on
+  // Receiver details and leaves it on Solaar, by the keys, with the pointer
+  // outside every stop.
+  function keysBorderChecks(view, band) {
+    var stops = {
+      settings: band ? band.settingsButton : null,
+      details: findByName(view, "detailsAction"),
+      solaar: findByName(view, "solaarAction"),
+      refresh: findByName(view, "refreshAction")
+    }
+    for (var name in stops)
+      check(stops[name] !== null, "the " + name + " stop is found")
+    if (!stops.settings || !stops.details || !stops.solaar || !stops.refresh)
+      return
     var bordered = function () {
-      return actions.filter(function (a) {
-        return a.border.width > 0
-      }).map(function (a) {
-        return a.objectName
+      return Object.keys(stops).filter(function (key) {
+        return stops[key].border.width > 0
       })
     }
-    var solaar = actions[1], refresh = actions[2]
-    check(solaar.hasCursor && solaar.border.width === FoamyStyle.borderWidth && Qt.colorEqual(solaar.border.color, Commons.Color.accent) && JSON.stringify(bordered()) === JSON.stringify(["solaarAction"]), "the keys' cursor on Solaar: its accent border, on it alone " + JSON.stringify(bordered()))
-    ev.mouseMove(refresh, refresh.width / 2, refresh.height / 2, -1, Qt.NoButton, Qt.NoModifier)
-    eq(view.cursorKey, "refresh", "the pointer on Refresh takes the cursor")
-    eq(JSON.stringify(bordered()), "[]", "the pointer's cursor: no action draws the keys' border")
+    var keysOn = function (key, label) {
+      var stop = stops[key]
+      check(view.cursorKey === key && stop.border.width === FoamyStyle.borderWidth && Qt.colorEqual(stop.border.color, Commons.Color.accent) && JSON.stringify(bordered()) === JSON.stringify([key]), label + ": the accent border on " + key + " alone " + JSON.stringify(bordered()))
+    }
+    var pointerAt = function (stop, dx) {
+      ev.mouseMove(stop, stop.width / 2 + dx, stop.height / 2, -1, Qt.NoButton, Qt.NoModifier)
+    }
+    keysOn("details", "the keys on Receiver details")
+    view.moveRequested(0, -1)
+    keysOn("settings", "the keys on the band's Settings")
     view.moveRequested(0, 1)
-    check(refresh.hasCursor && refresh.border.width === FoamyStyle.borderWidth && JSON.stringify(bordered()) === JSON.stringify(["refreshAction"]), "a key again: the border on Refresh " + JSON.stringify(bordered()))
+    view.moveRequested(1, 0)
+    keysOn("solaar", "the keys on Solaar")
+    pointerAt(stops.details, 0)
+    eq(view.cursorKey, "details", "the pointer on Receiver details takes the cursor")
+    eq(JSON.stringify(bordered()), "[]", "the pointer's cursor: no stop draws the keys' border")
+    view.moveRequested(1, 0)
+    keysOn("solaar", "a key again")
+    view.moveRequested(-1, 0)
+    keysOn("details", "the keys back on Receiver details, under the resting pointer")
+    pointerAt(stops.details, 3)
+    eq(view.cursorKey, "details", "the pointer moved inside Receiver details keeps the cursor there")
+    eq(JSON.stringify(bordered()), "[]", "the pointer moved inside the stop the keys came to: no stop draws the keys' border")
+    view.moveRequested(1, 0)
+    keysOn("solaar", "the keys on to Solaar")
+    // Off every stop (the band's start), so later opens start with no hover.
+    ev.mouseMove(view, 1, 1, -1, Qt.NoButton, Qt.NoModifier)
+    eq(view.cursorKey, "solaar", "the pointer off every stop leaves the cursor")
   }
   // Emits PanelKeyCatcher.textKey(text, modifiers) the way the host does.
   FoamyCursor {
@@ -361,9 +391,8 @@ ShellRoot {
     eq(view.cursorKey, "details", "then Receiver details")
     view.activateRequested()
     eq(first.receiverDetails, true, "Enter unfolds Receiver details")
-    view.moveRequested(1, 0)
+    shell.keysBorderChecks(view, band)
     eq(view.cursorKey, "solaar", "l moves on to Solaar")
-    shell.keysBorderChecks(view)
     view.moveRequested(0, 1)
     eq(view.cursorKey, "refresh", "then Refresh")
     shell.modifierChecks(view)

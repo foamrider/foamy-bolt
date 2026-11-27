@@ -178,6 +178,7 @@ PanelKeyCatcher {
       title: FoamyI18n.t("Logitech")
       meta: root.loading ? FoamyI18n.t("Reading devices…") : FoamyI18n.tn("%1 devices connected", root.onlineCount)
       settingsHasCursor: root.hasCursor("settings")
+      cursorByKeys: cursor.byKeys
       onSettingsClicked: root.settingsRequested()
       onSettingsHovered: function (hovered) {
         if (hovered)
