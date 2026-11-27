@@ -842,6 +842,7 @@ ShellRoot {
       return row.Accessible.name
     })
     eq(JSON.stringify(names), JSON.stringify(["MX Master 3S, " + t("Low battery") + ", " + t("%1%", 12), "MX Keys S, " + t("Charging") + ", " + t("%1%", 64), "G435, " + t("Offline")]), "each row says its device, state and reading")
+    shell.lowInkChecks(first, view, rows)
     // The other states: charging wins over low battery, an online device
     // without a reading, and an online device above the threshold.
     service.payload = ({
@@ -931,6 +932,45 @@ ShellRoot {
     panels.itemAt(1).settings = shell.barSettings({})
     service.payload = kept
     eq(shell.shownText(view, t("Updated just now")).length, 1, "the footer says when the snapshot was taken")
+  }
+
+  // The low-battery state and reading read at 4.5:1 where they are drawn: on
+  // the popup surface in the list, on the tile's fill in tiles. tests/runtime.py
+  // runs one case in a dark theme with a dim red, where the raw urgent colour
+  // does not (2.70:1).
+  function lowInkChecks(first, view, rows) {
+    var t = FoamyI18n.t
+    var surfaces = {
+      list: FoamyPalette.background,
+      tiles: Qt.tint(FoamyPalette.background, FoamyPalette.fieldFill)
+    };
+    ["list", "tiles"].forEach(function (layout) {
+      first.settings = shell.barSettings({
+        showOffline: true,
+        layout: layout
+      })
+      var low = rows().filter(function (row) {
+        return row.low && row.visible
+      })[0]
+      check(low !== undefined, layout + ": a low-battery row is shown")
+      if (!low)
+        return
+      [t("Low battery"), t("%1%", 12)].forEach(function (text) {
+        // Not shownText: a row rebuilt for the new layout has no width
+        // until the layout's next polish.
+        var shown = shell.findAll(low, function (item) {
+          return item.text === text && item.visible
+        })[0]
+        check(shown !== undefined, layout + ": the low row shows " + text)
+        if (!shown)
+          return
+        var ratio = FoamyPalette.contrastRatio(shown.color, surfaces[layout])
+        check(ratio >= 4.5, layout + ": low-battery " + text + " " + shown.color + " reads " + ratio.toFixed(2) + ":1 on its surface, under 4.5:1")
+      })
+    })
+    first.settings = shell.barSettings({
+      showOffline: true
+    })
   }
 
   // Right-click checks for Solaar with omarchy-cmd-present (a fake that

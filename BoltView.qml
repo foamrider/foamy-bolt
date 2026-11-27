@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import qs.Commons
-import qs.Commons as Commons
 import qs.Ui
 import "kit"
 import "Preferences.js" as Schema
@@ -296,7 +295,7 @@ PanelKeyCatcher {
           textFormat: Text.PlainText
           horizontalAlignment: Text.AlignLeft
           wrapMode: Text.WordWrap
-          color: Commons.Color.urgent
+          color: FoamyPalette.onSurface(FoamyPalette.error)
           font.family: FoamyStyle.fontFamily
           font.pixelSize: FoamyStyle.font.body
           Accessible.role: Accessible.AlertMessage
